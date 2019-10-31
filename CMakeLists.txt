@@ -320,5 +320,6 @@ if (OPM_ENABLE_PYTHON)
     target_link_libraries(opmcommon PUBLIC ${PYTHON_LIBRARY})
 
     add_definitions(-DEMBEDDED_PYTHON)
+    list(APPEND opm-common_LIBRARIES ${PYTHON_LIBRARY})
   endif()
 endif()
