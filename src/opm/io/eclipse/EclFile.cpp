@@ -31,6 +31,7 @@
 #include <string>
 #include <numeric>
 #include <cmath>
+#include <omp.h>
 
 #include <iostream>
 
@@ -768,6 +769,119 @@ void EclFile::loadData(int arrIndex)
         fileH.close();
     }
 }
+
+void EclFile::loadbalance(std::vector<int> arrIndexList, std::vector<std::vector<int>>& indexList,
+                          size_t& max_num_threads)
+{
+    // function will create max_num_threads vector<int> with array indices
+    //  ~ 1 / max_num_threads of total size in each vector
+
+    // if fraction of total size for largest array (size on disk) > 1/max_num_threads
+    //   - assign one theread to to this array
+    //   - recalculate max_num_threads
+
+    // example 1 element is 75% of total, not possible to split this single element
+    // use first threads one for this array and second for the rest of the arrays (25 % of total size)
+    // if input max_num_threads > 2, max_num_threads is reset to 2
+
+    //std::vector<int> arrIndexList = arrIndex;
+
+    size_t nArrays = arrIndexList.size();
+
+    std::vector<int64_t> sizeList;
+    sizeList.reserve(nArrays);
+    uint64_t tot_size = 0;
+
+    for (size_t n=0; n < arrIndexList.size(); n++){
+        size_t ind = arrIndexList[n];
+
+        if ((array_type[ind] == Opm::EclIO::DOUB) || (array_type[ind] == Opm::EclIO::CHAR))
+            sizeList.push_back(array_size[ind]*8);
+        else
+            sizeList.push_back(array_size[ind]*4);
+
+        tot_size += sizeList[n];
+    }
+
+    std::vector<float> fraction;
+    fraction.reserve(nArrays);
+
+    for (size_t n = 0; n < nArrays; n++)
+        fraction.push_back(static_cast<float>(sizeList[n])/static_cast<float>(tot_size));
+
+
+    auto maxFracIt = max_element(fraction.begin(), fraction.end());
+
+    if (*maxFracIt > (1.0 / static_cast<float>(max_num_threads))) {
+        max_num_threads = 2;
+        while ((1.0 / static_cast<float>(max_num_threads)) > *maxFracIt)
+            max_num_threads = max_num_threads + 1;
+
+        size_t n = std::distance(fraction.begin(), maxFracIt);
+        indexList.push_back( {arrIndexList[n]});
+        arrIndexList.erase (arrIndexList.begin()+n);
+        fraction.erase (fraction.begin()+n);
+    }
+
+    size_t t = 0;
+    if (indexList.size() > 0)
+        t = 1;
+
+    for (size_t n = t; n < max_num_threads; n++)
+        indexList.push_back( {});
+
+    float rel_size = 1.0 / static_cast<float>(max_num_threads);
+    float sum_frac = 0.0;
+
+    for (size_t n = 0; n < arrIndexList.size(); n++) {
+        size_t ind = arrIndexList[n];
+        indexList[t].push_back(ind);
+
+        sum_frac += fraction[n];
+
+        if (sum_frac > rel_size) {
+            t += 1;
+            sum_frac = 0.0;
+        }
+    }
+}
+
+void EclFile::loadData(const std::vector<int>& arrIndex, size_t num_threads)
+{
+    std::vector<int> arrayIndices;
+
+    if (arrIndex.size() == 0){
+        size_t nArrays = array_name.size();
+        arrayIndices.resize(nArrays,0);
+        std::iota(arrayIndices.begin(), arrayIndices.end(), 0);
+    } else {
+        arrayIndices = arrIndex;
+    }
+
+    if (num_threads < 2)
+        loadData(arrayIndices);
+    else {
+        size_t max_num_threads = omp_get_max_threads();
+        //size_t nProcessors = omp_get_num_procs();
+
+        std::cout << "maximum number of threads " << max_num_threads << std::endl;
+
+        if ((max_num_threads -1) < num_threads)
+            num_threads = max_num_threads -1;
+
+        std::vector<std::vector<int>> indexList;
+        loadbalance(arrayIndices, indexList, num_threads);
+
+        std::cout << "number of threads actually used: " << num_threads << std::endl;
+
+        omp_set_num_threads(num_threads);
+
+        #pragma omp parallel for
+        for (size_t n=0; n < num_threads; n++)
+            this->loadData(indexList[n]);
+    }
+}
+
 
 std::vector<EclFile::EclEntry> EclFile::getList() const
 {

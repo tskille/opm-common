@@ -42,6 +42,7 @@ public:
     void loadData(const std::string& arrName);         // load all arrays with array name equal to arrName
     void loadData(int arrIndex);                // load data based on array indices in vector arrIndex
     void loadData(const std::vector<int>& arrIndex);   // load data based on array indices in vector arrIndex
+    void loadData(const std::vector<int>& arrIndex, size_t max_num_threads);   // load data based on array indices in vector arrIndex
 
     void clearData()
     {
@@ -110,7 +111,8 @@ private:
 
     void loadBinaryArray(std::fstream& fileH, std::size_t arrIndex);
     void loadFormattedArray(const std::string& fileStr, std::size_t arrIndex, int64_t fromPos);
-    
+    void loadbalance(std::vector<int> arrIndex, std::vector<std::vector<int>>& indexList, size_t& max_num_threads);
+
 };
 
 }} // namespace Opm::EclIO
