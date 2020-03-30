@@ -32,6 +32,7 @@
 #include <numeric>
 #include <cmath>
 #include <omp.h>
+#include <thread>
 
 #include <iostream>
 
@@ -107,19 +108,19 @@ void readBinaryHeader(std::fstream& fileH, std::string& arrName,
     int tmpSize;
 
     readBinaryHeader(fileH, tmpStrName, tmpSize, tmpStrType);
-    
+
     if (tmpStrType == "X231"){
         std::string x231ArrayName = tmpStrName;
         int x231exp = tmpSize * (-1);
 
         readBinaryHeader(fileH, tmpStrName, tmpSize, tmpStrType);
-        
+
         if (x231ArrayName != tmpStrName)
             OPM_THROW(std::runtime_error, "Invalied X231 header, name should be same in both headers'");
 
         if (x231exp < 0)
             OPM_THROW(std::runtime_error, "Invalied X231 header, size of array should be negative'");
-        
+
         size = static_cast<int64_t>(tmpSize) + static_cast<int64_t>(x231exp) * pow(2,31);
     } else {
         size = static_cast<int64_t>(tmpSize);
@@ -516,7 +517,7 @@ EclFile::EclFile(const std::string& filename, bool preload) : inputFilename(file
         std::string arrName(8,' ');
         eclArrType arrType;
         int64_t num;
-        
+
         if (formatted) {
             readFormattedHeader(fileH,arrName,num,arrType);
         } else {
@@ -534,7 +535,7 @@ EclFile::EclFile(const std::string& filename, bool preload) : inputFilename(file
 
         arrayLoaded.push_back(false);
 
-        if (num > 0){ 
+        if (num > 0){
             if (formatted) {
                 uint64_t sizeOfNextArray = sizeOnDiskFormatted(num, arrType);
                 fileH.seekg(static_cast<std::streamoff>(sizeOfNextArray), std::ios_base::cur);
@@ -879,6 +880,56 @@ void EclFile::loadData(const std::vector<int>& arrIndex, size_t num_threads)
         #pragma omp parallel for
         for (size_t n=0; n < num_threads; n++)
             this->loadData(indexList[n]);
+    }
+}
+
+
+void EclFile::loadArrays(const std::vector<int>& arrIndex)
+{
+     loadData(arrIndex);
+}
+
+
+
+void EclFile::loadData2(const std::vector<int>& arrIndex, size_t num_threads)
+{
+    std::vector<int> arrayIndices;
+    std::cout << "fixing num threads to 4, using pthreads " << std::endl;
+
+    //num_threads=4;
+
+    if (arrIndex.size() == 0){
+        size_t nArrays = array_name.size();
+        arrayIndices.resize(nArrays,0);
+        std::iota(arrayIndices.begin(), arrayIndices.end(), 0);
+    } else {
+        arrayIndices = arrIndex;
+    }
+
+    if (num_threads < 2)
+        loadData(arrayIndices);
+    else {
+
+        size_t max_num_threads = omp_get_max_threads();
+        //size_t nProcessors = omp_get_num_procs();
+
+        std::cout << "maximum number of threads " << max_num_threads << std::endl;
+
+        if ((max_num_threads -1) < num_threads)
+            num_threads = max_num_threads -1;
+
+        std::vector<std::vector<int>> indexList;
+        loadbalance(arrayIndices, indexList, num_threads);
+
+        std::cout << "number of threads actually used: " << num_threads << std::endl;
+
+        std::vector<std::thread> threads;
+        for (auto& indexVector: indexList)
+            threads.emplace_back(&EclFile::loadArrays, this, std::cref(indexVector));
+
+        for (auto& thread: threads)
+            thread.join();
+
     }
 }
 
