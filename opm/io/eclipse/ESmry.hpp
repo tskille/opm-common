@@ -58,6 +58,7 @@ public:
     void LoadData() const;
 
     bool make_lodsmry_file();
+    bool make_h5smry_file();
 
     std::chrono::system_clock::time_point startdate() const { return startdat; }
 
@@ -76,9 +77,9 @@ public:
     void write_rsm_file(std::optional<Opm::filesystem::path> = std::nullopt) const;
 
 private:
-    Opm::filesystem::path inputFileName, lodFileName;
+    Opm::filesystem::path inputFileName, lodFileName, h5FileName;
     int nI, nJ, nK, nSpecFiles;
-    bool fromSingleRun, lodEnabeled;
+    bool fromSingleRun, lodEnabeled, h5Enabeled;
     uint64_t lod_offset, lod_arr_size;
     size_t nVect, nTstep;
 
@@ -136,6 +137,9 @@ private:
     std::string read_string_from_disk(std::fstream& fileH, uint64_t size) const;
     void inspect_lodsmry();
     void Load_from_lodsmry(const std::vector<int>& keywIndVect) const;
+
+    void inspect_h5smry();
+    void Load_from_h5smry(const std::vector<int>& keywIndVect) const;
 };
 
 }} // namespace Opm::EclIO

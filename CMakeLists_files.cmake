@@ -244,6 +244,7 @@ if(ENABLE_ECL_OUTPUT)
           src/opm/io/eclipse/EclFile.cpp
           src/opm/io/eclipse/EclOutput.cpp
           src/opm/io/eclipse/EclUtil.cpp
+          src/opm/io/eclipse/Hdf5Util.cpp
           src/opm/io/eclipse/EGrid.cpp
           src/opm/io/eclipse/ERft.cpp
           src/opm/io/eclipse/ERst.cpp
@@ -479,6 +480,8 @@ if(ENABLE_ECL_INPUT)
     examples/opmhash.cpp
     examples/wellgraph.cpp
     examples/make_lodsmry.cpp
+    examples/make_h5smry.cpp
+    examples/test_lod_esmry.cpp
   )
 endif()
 
@@ -756,6 +759,7 @@ if(ENABLE_ECL_OUTPUT)
         opm/io/eclipse/EclIOdata.hpp
         opm/io/eclipse/EclOutput.hpp
         opm/io/eclipse/EclUtil.hpp
+        opm/io/eclipse/Hdf5Util.hpp
         opm/io/eclipse/EGrid.hpp
         opm/io/eclipse/ERft.hpp
         opm/io/eclipse/ERst.hpp
