@@ -67,6 +67,22 @@ int main(int argc, char **argv) {
 
     int argOffset = optind;
 
+    Opm::filesystem::path inputFileName = argv[optind];
+
+    Opm::filesystem::path h5FileName = inputFileName.parent_path() / inputFileName.stem();
+    h5FileName = h5FileName += ".h5";
+
+
+    if (Opm::EclIO::fileExists(h5FileName) && (true))
+        remove (h5FileName);
+
+    Opm::EclIO::ESmry smryFile(argv[optind]);
+    if (!smryFile.make_h5smry_file_eclrun()){
+        std::cout << "\n! Warning, smspec already have one h5 file, existing kept use option -f to replace this" << std::endl;
+    }
+
+/*
+
 #if HAVE_OPENMP
     int available_threads = omp_get_max_threads();
 
@@ -102,6 +118,6 @@ int main(int argc, char **argv) {
     auto lap1 = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds1 = lap1-lap0;
     std::cout << "\nruntime for creating " << (argc-argOffset) << " LODSMRY files: " << elapsed_seconds1.count() << " seconds\n" << std::endl;
-
+*/
     return 0;
 }

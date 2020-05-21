@@ -20,8 +20,27 @@
 
 #include <type_traits>
 #include <stdexcept>
+#include <string.h>
 
 #include <iostream>
+
+void  Opm::Hdf5IO::write_str_variable(hid_t file_id, const char* data_set_name, const std::string& variable)
+{
+    size_t length = variable.size();
+
+    hid_t dataspace_id = H5Screate_simple(0, NULL, NULL);
+    hid_t datatype_id = H5Tcopy (H5T_C_S1);
+    H5Tset_size (datatype_id, length);
+
+    hid_t dataset_id = H5Dcreate2(file_id, data_set_name, datatype_id, dataspace_id,
+                                  H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    H5Dwrite(dataset_id, datatype_id, H5S_ALL, H5S_ALL, H5P_DEFAULT, variable.c_str());
+
+    H5Sclose(dataspace_id);
+    H5Dclose(dataset_id);
+
+}
 
 void  Opm::Hdf5IO::write_array_1d(hid_t file_id, const char* data_set_name, hid_t datatype_id, const void * data, size_t size)
 {

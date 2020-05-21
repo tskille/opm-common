@@ -27,7 +27,7 @@
 
 namespace Opm {   namespace Hdf5IO {
 
-    //write_array(hid_t file_id, const std::string& data_set_name, hid_t datatype_id, const void * data );
+    void  write_str_variable(hid_t file_id, const char* data_set_name, const std::string& variable);
 
     void write_array_1d(hid_t file_id, const char* data_set_name, hid_t datatype_id, const void * data, size_t size);
 

@@ -59,6 +59,7 @@ public:
 
     bool make_lodsmry_file();
     bool make_h5smry_file();
+    bool make_h5smry_file_eclrun();
 
     std::chrono::system_clock::time_point startdate() const { return startdat; }
 
@@ -82,6 +83,8 @@ private:
     bool fromSingleRun, lodEnabeled, h5Enabeled;
     uint64_t lod_offset, lod_arr_size;
     size_t nVect, nTstep;
+
+    std::vector<int> startd;
 
     std::vector<bool> formattedFiles;
     std::vector<std::string> dataFileList;

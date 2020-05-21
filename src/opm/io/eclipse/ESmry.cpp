@@ -146,7 +146,7 @@ ESmry::ESmry(const std::string &filename, bool loadBaseRunData) :
     } ;
 
     std::vector<EclFile> smspecList;
-    std::vector<std::string> vectList = {"DIMENS", "RESTART", "KEYWORDS", "NUMS", "UNITS"};
+    std::vector<std::string> vectList = {"DIMENS", "RESTART", "KEYWORDS", "NUMS", "UNITS", "STARTDAT"};
 
     // Read data from the summary into local data members.
     {
@@ -177,6 +177,9 @@ ESmry::ESmry(const std::string &filename, bool loadBaseRunData) :
         combindKeyList.reserve(dimens[0]);
 
         this->startdat = make_date(smspecList.back().get<int>("STARTDAT"));
+
+        startd = smspecList.back().get<int>("STARTDAT");
+
 
         for (unsigned int i=0; i<keywords.size(); i++) {
             const std::string keyString = makeKeyString(keywords[i], wgnames[i], nums[i]);
@@ -1136,6 +1139,137 @@ bool ESmry::make_h5smry_file()
         return true;
     }
 }
+
+
+bool ESmry::make_h5smry_file_eclrun()
+{
+    // check that loadBaseRunData is not set, this function only works for single smspec files
+    // function will not replace existing lodsmry files (since this is already loaded by this class)
+    // if lodsmry file exist, this function will return false and do nothing.
+
+    if (!fromSingleRun)
+        OPM_THROW(std::invalid_argument, "creating h5smry file only possible when loadBaseRunData=false");
+
+
+    Opm::filesystem::path path = inputFileName.parent_path();
+    Opm::filesystem::path rootName = inputFileName.stem();
+    Opm::filesystem::path smryDataFile;
+
+    smryDataFile = path / rootName += ".h5";
+
+    if (Opm::EclIO::fileExists(smryDataFile))
+    {
+        return false;
+
+    } else {
+
+        //Opm::filesystem::path smspec_file = inputFileName.stem() += ".SMSPEC";
+
+        std::string smspec_file(inputFileName.stem());
+        smspec_file = smspec_file  + ".SMSPEC";
+
+        std::cout << smspec_file << std::endl;
+
+        hid_t file_id = H5Fcreate(smryDataFile.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+
+        hid_t group_id_general = H5Gcreate2(file_id, "/general", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+        std::vector<int> mod_startdat = startd;
+        mod_startdat.push_back(0);
+
+        //std::vector<int> version = {1, 7};
+        //std::vector<int> checksum = {-1625148362};
+
+
+        //Opm::Hdf5IO::write_1d_hdf5(file_id, "/general/checksum",  checksum );
+        Opm::Hdf5IO::write_str_variable(file_id, "/general/name", smspec_file);
+        Opm::Hdf5IO::write_1d_hdf5(file_id, "/general/start_date",  mod_startdat );
+
+        std::vector<float> time = get("TIME");
+        Opm::Hdf5IO::write_1d_hdf5(file_id, "/general/time",  time );
+        //Opm::Hdf5IO::write_1d_hdf5(file_id, "/general/version",  version );
+
+        this->LoadData();
+
+        hid_t group_id_summary = H5Gcreate2(file_id, "/summary_vectors", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+        std::set<std::string> sub_groups;
+
+        for (size_t n = 0; n < keyword.size(); n++){
+            std::string first_name;
+
+            size_t pos = keyword[n].find_first_of(":");
+
+            if (pos == std::string::npos)
+                first_name = keyword[n];
+            else
+                first_name = keyword[n].substr(0, pos);
+
+            std::string group_name = std::string("/summary_vectors/") + first_name;
+
+            if (sub_groups.find(first_name) == sub_groups.end()){
+                hid_t group_id_summary = H5Gcreate2(file_id, group_name.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                sub_groups.insert(first_name);
+            }
+
+            group_name = group_name + std::string("/") + std::to_string(arrayPos[0][n]);
+
+            std::cout << n << ", " << keyword[n] << " pos: " << arrayPos[0][n];
+            std::cout << " group_name : '" << group_name << "'" << std::endl;
+
+            group_id_summary = H5Gcreate2(file_id, group_name.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+            std::string array_name = group_name + std::string("/values");
+
+            std::vector<float> data = get(keyword[n]);
+
+            Opm::Hdf5IO::write_1d_hdf5(file_id, array_name,  data );
+
+
+        }
+
+
+        //Opm::Hdf5IO::write_1d_hdf5<std::string>(file_id, "/general/name",  {smspec_file} );
+
+
+        H5Gclose(group_id_general);
+        H5Fclose(file_id);
+
+        //for (int v : startd)
+        //    std::cout << v << std::endl;
+
+        //  std::chrono::system_clock::time_point startdat;
+
+        //std::cout << startdat.year()  << std::endl;
+
+
+    std::cout << "good so far in new make_h5" << std::endl;
+    exit(1);
+
+
+        Opm::Hdf5IO::write_1d_hdf5(file_id, "KEYWORDS",  keyword );
+
+        std::vector<bool> is_rstep;
+        is_rstep.reserve(timeStepList.size());
+
+        for (size_t i = 0; i < timeStepList.size(); i++)
+            if(std::find(seqIndex.begin(), seqIndex.end(), i) != seqIndex.end())
+                is_rstep.push_back(true);
+            else
+                is_rstep.push_back(false);
+
+        Opm::Hdf5IO::write_1d_hdf5(file_id, "RSTEP",  is_rstep );
+
+        this->LoadData();
+
+        Opm::Hdf5IO::write_2d_hdf5(file_id, "SMRYDATA",  vectorData );
+
+        H5Fclose(file_id);
+
+        return true;
+    }
+}
+
 
 
 
