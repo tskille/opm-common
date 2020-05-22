@@ -42,16 +42,40 @@ void  Opm::Hdf5IO::write_str_variable(hid_t file_id, const char* data_set_name, 
 
 }
 
-void  Opm::Hdf5IO::write_array_1d(hid_t file_id, const char* data_set_name, hid_t datatype_id, const void * data, size_t size)
+void  Opm::Hdf5IO::write_array_1d(hid_t file_id, const char* data_set_name, hid_t datatype_id,
+                                  const void * data, size_t size, bool unlimited)
 {
-    hsize_t dims[1] {size};
+    hsize_t dims[1];
+    hid_t dataset_id, dataspace_id;
 
-    hid_t dataspace_id = H5Screate_simple(1, dims, NULL);
+    if (unlimited){
+        dims[0] = size;
 
-    hid_t dataset_id = H5Dcreate2(file_id, data_set_name, datatype_id, dataspace_id,
+        hsize_t chunk_dims[1] = {1};
+        hsize_t maxdims[1] = {H5S_UNLIMITED};
+
+        dataspace_id = H5Screate_simple (1, dims, maxdims);
+
+        hid_t prop = H5Pcreate (H5P_DATASET_CREATE);
+        herr_t status = H5Pset_chunk (prop, 1, chunk_dims);
+
+        dataset_id = H5Dcreate2 (file_id, data_set_name, datatype_id, dataspace_id,
+                         H5P_DEFAULT, prop, H5P_DEFAULT);
+
+        status = H5Dwrite (dataset_id, datatype_id, H5S_ALL, H5S_ALL,
+                        H5P_DEFAULT, data);
+
+
+    } else {
+        dims[0] = size;
+
+        dataspace_id = H5Screate_simple(1, dims, NULL);
+
+        dataset_id = H5Dcreate2(file_id, data_set_name, datatype_id, dataspace_id,
                                   H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-    H5Dwrite(dataset_id, datatype_id, H5S_ALL, H5S_ALL, H5P_DEFAULT, data);
+        H5Dwrite(dataset_id, datatype_id, H5S_ALL, H5S_ALL, H5P_DEFAULT, data);
+    }
 
     H5Sclose(dataspace_id);
     H5Dclose(dataset_id);
@@ -59,29 +83,29 @@ void  Opm::Hdf5IO::write_array_1d(hid_t file_id, const char* data_set_name, hid_
 
 template <>
 void Opm::Hdf5IO::write_1d_hdf5(hid_t file_id, const std::string& data_set_name,
-                   const std::vector<int>& dataVect )
+                   const std::vector<int>& dataVect, bool unlimited)
 {
-    Opm::Hdf5IO::write_array_1d(file_id, data_set_name.c_str(), H5T_NATIVE_INT, dataVect.data(), dataVect.size());
+    Opm::Hdf5IO::write_array_1d(file_id, data_set_name.c_str(), H5T_NATIVE_INT, dataVect.data(), dataVect.size(), unlimited);
 }
 
 template <>
 void Opm::Hdf5IO::write_1d_hdf5(hid_t file_id, const std::string& data_set_name,
-                   const std::vector<float>& dataVect )
+                   const std::vector<float>& dataVect, bool unlimited)
 {
-    Opm::Hdf5IO::write_array_1d(file_id, data_set_name.c_str(), H5T_NATIVE_FLOAT, dataVect.data(), dataVect.size());
+    Opm::Hdf5IO::write_array_1d(file_id, data_set_name.c_str(), H5T_NATIVE_FLOAT, dataVect.data(), dataVect.size(), unlimited);
 }
 
 template <>
 void Opm::Hdf5IO::write_1d_hdf5(hid_t file_id, const std::string& data_set_name,
-                   const std::vector<double>& dataVect )
+                   const std::vector<double>& dataVect, bool unlimited)
 {
-    Opm::Hdf5IO::write_array_1d(file_id, data_set_name.c_str(), H5T_NATIVE_DOUBLE, dataVect.data(), dataVect.size());
+    Opm::Hdf5IO::write_array_1d(file_id, data_set_name.c_str(), H5T_NATIVE_DOUBLE, dataVect.data(), dataVect.size(), unlimited);
 }
 
 
 template<>
 void Opm::Hdf5IO::write_1d_hdf5(hid_t file_id, const std::string& data_set_name,
-                   const std::vector<std::string>& dataVect )
+                   const std::vector<std::string>& dataVect, bool unlimited)
 {
     std::vector<const char*> arr_c_str;
     hid_t dataspace_id, datatype_id, dataset_id;
@@ -92,51 +116,241 @@ void Opm::Hdf5IO::write_1d_hdf5(hid_t file_id, const std::string& data_set_name,
     datatype_id = H5Tcopy (H5T_C_S1);
     H5Tset_size (datatype_id, H5T_VARIABLE);
 
-    Opm::Hdf5IO::write_array_1d(file_id, data_set_name.c_str(), datatype_id, arr_c_str.data(), arr_c_str.size());
+    Opm::Hdf5IO::write_array_1d(file_id, data_set_name.c_str(), datatype_id, arr_c_str.data(), arr_c_str.size(), unlimited);
 }
 
 template<>
 void Opm::Hdf5IO::write_1d_hdf5(hid_t file_id, const std::string& data_set_name,
-                   const std::vector<bool>& dataVect )
+                   const std::vector<bool>& dataVect, bool unlimited)
 {
     std::vector<int> intVect(dataVect.size(), 1);
 
     for (size_t n=0; n < dataVect.size(); n++)
         dataVect[n] ? intVect[n]=1 :  intVect[n]=0;
 
-    Opm::Hdf5IO::write_array_1d(file_id, data_set_name.c_str(), H5T_NATIVE_INT, intVect.data(), intVect.size());
+    Opm::Hdf5IO::write_array_1d(file_id, data_set_name.c_str(), H5T_NATIVE_INT, intVect.data(), intVect.size(), unlimited);
+}
+
+//  void  Opm::Hdf5IO::write_array_1d(hid_t file_id, const char* data_set_name, hid_t datatype_id,
+//                                  const void * data, size_t size, bool unlimited)
+
+template <typename T>
+void Opm::Hdf5IO::add_value_1d(hid_t dataset_id, hid_t datatype_id, T value)
+{
+    hsize_t  size[1];
+    hsize_t dims[1];
+
+    hid_t filespace = H5Dget_space (dataset_id);
+
+    H5Sget_simple_extent_dims(filespace, dims, NULL);
+
+    size[0] = dims[0] + 1;
+
+    herr_t  status = H5Dset_extent (dataset_id, size);
+    filespace = H5Dget_space (dataset_id);
+
+    H5Sget_simple_extent_dims(filespace, dims, NULL);
+
+    hsize_t  dimsext[1];
+    dimsext[0] = 1;
+
+    hsize_t   offset[1];
+    offset[0] = dims[0] - 1;
+
+    status = H5Sselect_hyperslab (filespace, H5S_SELECT_SET, offset, NULL,
+                                  dimsext, NULL);
+
+    // Define memory space
+    hid_t memspace = H5Screate_simple (1, dimsext, NULL);
+
+    T data[1]  {value};
+
+    status = H5Dwrite (dataset_id, datatype_id, memspace, filespace,
+                       H5P_DEFAULT, data );
+
+    H5Sclose(memspace);
+    H5Sclose(filespace);
+    H5Dclose(dataset_id);
+}
+
+template <>
+void Opm::Hdf5IO::add_value_to_1d_hdf5(hid_t file_id, const std::string& data_set_name, float value)
+{
+    hid_t dataset_id = H5Dopen2 (file_id, data_set_name.c_str(), H5P_DEFAULT);
+    Opm::Hdf5IO::add_value_1d(dataset_id, H5T_NATIVE_FLOAT, value);
+}
+
+template <>
+void Opm::Hdf5IO::add_value_to_1d_hdf5(hid_t file_id, const std::string& data_set_name, double value)
+{
+    hid_t dataset_id = H5Dopen2 (file_id, data_set_name.c_str(), H5P_DEFAULT);
+    Opm::Hdf5IO::add_value_1d(dataset_id, H5T_NATIVE_DOUBLE, value);
+}
+
+template <>
+void Opm::Hdf5IO::add_value_to_1d_hdf5(hid_t file_id, const std::string& data_set_name, int value)
+{
+    hid_t dataset_id = H5Dopen2 (file_id, data_set_name.c_str(), H5P_DEFAULT);
+    Opm::Hdf5IO::add_value_1d(dataset_id, H5T_NATIVE_INT, value);
+}
+
+template <>
+void Opm::Hdf5IO::add_value_to_1d_hdf5(hid_t file_id, const std::string& data_set_name, std::string value)
+{
+    hid_t dataset_id = H5Dopen2 (file_id, data_set_name.c_str(), H5P_DEFAULT);
+
+    hid_t datatype_id = H5Tcopy (H5T_C_S1);
+    H5Tset_size (datatype_id, H5T_VARIABLE);
+
+    Opm::Hdf5IO::add_value_1d(dataset_id, datatype_id, value);
+}
+
+/*
+template <typename T>
+void Opm::Hdf5IO::add_value_1d(hid_t dataset_id, hid_t datatype_id, T value)
+{
+    hsize_t  size[1];
+    hsize_t dims[1];
+
+    hid_t filespace = H5Dget_space (dataset_id);
+
+    H5Sget_simple_extent_dims(filespace, dims, NULL);
+
+    size[0] = dims[0] + 1;
+
+    herr_t  status = H5Dset_extent (dataset_id, size);
+    filespace = H5Dget_space (dataset_id);
+
+    H5Sget_simple_extent_dims(filespace, dims, NULL);
+
+    hsize_t  dimsext[1];
+    dimsext[0] = 1;
+
+    hsize_t   offset[1];
+    offset[0] = dims[0] - 1;
+
+    status = H5Sselect_hyperslab (filespace, H5S_SELECT_SET, offset, NULL,
+                                  dimsext, NULL);
+
+    // Define memory space
+    hid_t memspace = H5Screate_simple (1, dimsext, NULL);
+
+    T data[1]  {value};
+
+    status = H5Dwrite (dataset_id, datatype_id, memspace, filespace,
+                       H5P_DEFAULT, data );
+
+    H5Sclose(memspace);
+    H5Sclose(filespace);
+    H5Dclose(dataset_id);
+}
+
+
+ */
+void Opm::Hdf5IO::add_1d_to_2d(hid_t file_id, const std::string& data_set_name, const std::vector<float>& vectData){
+
+    hid_t dataset_id = H5Dopen2 (file_id, data_set_name.c_str(), H5P_DEFAULT);
+
+    hsize_t size[2];
+    hsize_t dims[2];
+
+    hid_t filespace = H5Dget_space (dataset_id);
+
+    H5Sget_simple_extent_dims(filespace, dims, NULL);
+
+    size[0] = dims[0];
+    size[1] = dims[1] + 1;
+
+    herr_t  status = H5Dset_extent (dataset_id, size);
+    filespace = H5Dget_space (dataset_id);
+
+    H5Sget_simple_extent_dims(filespace, dims, NULL);
+
+    hsize_t  dimsext[2];
+    dimsext[0] = dims[0];
+    dimsext[1] = 1;
+
+    hsize_t   offset[2];
+    offset[0] = 0;
+    offset[1] = dims[1] - 1;
+
+    status = H5Sselect_hyperslab (filespace, H5S_SELECT_SET, offset, NULL,
+                                  dimsext, NULL);
+
+     // Define memory space
+    hid_t memspace = H5Screate_simple (2, dimsext, NULL);
+
+    //T data[1]  {value};
+
+    status = H5Dwrite (dataset_id, H5T_NATIVE_FLOAT, memspace, filespace,
+                       H5P_DEFAULT, vectData.data() );
+
+    H5Sclose(memspace);
+    H5Sclose(filespace);
+    H5Dclose(dataset_id);
+
+
 }
 
 
 template <>
 void Opm::Hdf5IO::write_2d_hdf5(hid_t file_id, const std::string& data_set_name,
-                   const std::vector<std::vector<float>>& dataVect )
+                                const std::vector<std::vector<float>>& dataVect, bool unlimited2)
 {
+    hid_t dataset_id, dataspace_id;
+
     size_t nx = dataVect.size();
     size_t ny = dataVect[0].size();
 
     hsize_t     dims[2] {nx, ny};              // dataset dimensions
 
-    hid_t dataspace_id = H5Screate_simple(2, dims, NULL);
+    if (unlimited2) {
 
-    hid_t dataset_id = H5Dcreate2(file_id, data_set_name.c_str(), H5T_NATIVE_FLOAT, dataspace_id,
-                                  H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hsize_t chunk_dims[2] = {nx, 1};
+        hsize_t maxdims[2] = {nx, H5S_UNLIMITED};
 
-    float * data = new float[nx*ny];
+        dataspace_id = H5Screate_simple (2, dims, maxdims);
 
-    for (size_t n = 0; n < nx; n ++)
-        for (size_t m = 0; m < ny; m ++)
-            data[ m + n *ny] = dataVect[n][m];
+        hid_t prop = H5Pcreate (H5P_DATASET_CREATE);
+        herr_t status = H5Pset_chunk (prop, 2, chunk_dims);
 
-    H5Dwrite(dataset_id, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, data);
+        dataset_id = H5Dcreate2 (file_id, data_set_name.c_str(), H5T_NATIVE_FLOAT, dataspace_id,
+                         H5P_DEFAULT, prop, H5P_DEFAULT);
 
-    delete[] data;
+        if (ny > 0){
+            float * data = new float[nx*ny];
+
+            for (size_t n = 0; n < nx; n ++)
+                for (size_t m = 0; m < ny; m ++)
+                    data[ m + n *ny] = dataVect[n][m];
+
+            H5Dwrite(dataset_id, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, data);
+
+            delete[] data;
+        }
+
+    } else {
+
+        dataspace_id = H5Screate_simple(2, dims, NULL);
+
+        dataset_id = H5Dcreate2(file_id, data_set_name.c_str(), H5T_NATIVE_FLOAT, dataspace_id,
+                                H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+        float * data = new float[nx*ny];
+
+        for (size_t n = 0; n < nx; n ++)
+            for (size_t m = 0; m < ny; m ++)
+                data[ m + n *ny] = dataVect[n][m];
+
+        H5Dwrite(dataset_id, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, data);
+
+        delete[] data;
+    }
 
     H5Sclose(dataspace_id);
     H5Dclose(dataset_id);
 }
 
-// -- herfra
 
 H5T_class_t Opm::Hdf5IO::open_1d_dset(hid_t file_id, const char* name, hid_t& dataset_id, hid_t& memspace, hid_t& dataspace,
                          size_t& size, size_t& size_e)

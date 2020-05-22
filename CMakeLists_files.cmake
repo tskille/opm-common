@@ -482,6 +482,8 @@ if(ENABLE_ECL_INPUT)
     examples/make_lodsmry.cpp
     examples/make_h5smry.cpp
     examples/test_lod_esmry.cpp
+    examples/make_h5_eclrun_from_unsmry.cpp
+    examples/make_h5_from_unsmry.cpp
   )
 endif()
 

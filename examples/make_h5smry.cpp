@@ -81,43 +81,5 @@ int main(int argc, char **argv) {
         std::cout << "\n! Warning, smspec already have one h5 file, existing kept use option -f to replace this" << std::endl;
     }
 
-/*
-
-#if HAVE_OPENMP
-    int available_threads = omp_get_max_threads();
-
-    if (max_threads < 0)
-        max_threads = available_threads-2;
-    else if (max_threads > (available_threads - 1))
-        max_threads = available_threads-1;
-
-    if (max_threads > (argc-argOffset))
-        max_threads = argc-argOffset;
-
-    omp_set_num_threads(max_threads);
-#endif
-
-    auto lap0 = std::chrono::system_clock::now();
-
-    #pragma omp parallel for
-    for (int f = argOffset; f < argc; f ++){
-        Opm::filesystem::path inputFileName = argv[f];
-
-        Opm::filesystem::path h5FileName = inputFileName.parent_path() / inputFileName.stem();
-        h5FileName = h5FileName += ".H5SMRY";
-
-        if (Opm::EclIO::fileExists(h5FileName) && (force))
-            remove (h5FileName);
-
-        Opm::EclIO::ESmry smryFile(argv[f]);
-        if (!smryFile.make_h5smry_file()){
-            std::cout << "\n! Warning, smspec already have one h5 file, existing kept use option -f to replace this" << std::endl;
-        }
-    }
-
-    auto lap1 = std::chrono::system_clock::now();
-    std::chrono::duration<double> elapsed_seconds1 = lap1-lap0;
-    std::cout << "\nruntime for creating " << (argc-argOffset) << " LODSMRY files: " << elapsed_seconds1.count() << " seconds\n" << std::endl;
-*/
     return 0;
 }

@@ -78,6 +78,7 @@ int main(int argc, char **argv) {
         smry_vect.emplace_back(new Opm::EclIO::ESmry(argv[f]));
     }
 
+
     auto lap1 = std::chrono::system_clock::now();
 
     for (auto key : vectorList){
@@ -93,6 +94,14 @@ int main(int argc, char **argv) {
 
     std::cout << "\nruntime for opening          : " << elapsed_seconds1.count() << " seconds" << std::endl;
     std::cout << "runtime for loaing vectorlist: " << elapsed_seconds2.count() << " seconds\n" << std::endl;
+
+    auto time = smry_vect[0]->get("TIME");
+    auto fopr = smry_vect[0]->get("FOPR");
+
+    for (auto val : fopr)
+        std::cout << val << std::endl;
+
+
 
     return 0;
 }

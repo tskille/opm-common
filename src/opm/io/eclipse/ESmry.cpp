@@ -553,18 +553,22 @@ void ESmry::inspect_lodsmry()
 
 void ESmry::inspect_h5smry()
 {
+    std::cout << "\n!Info: ESmry is using h5 file, not UNSMRY\n" << std::endl;
+
     hid_t file_id = H5Fopen( h5FileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
 
+    /*
     std::vector<std::string> keycheck = Opm::Hdf5IO::get_1d_hdf5<std::string>(file_id, "KEYWORDS");
 
     for (size_t n = 0; n < nVect; n++)
         if (keyword[n] != keycheck[n])
             OPM_THROW(std::invalid_argument, "keycheck not maching keyword array");
+    */
 
-    std::vector<bool> rstep = Opm::Hdf5IO::get_1d_hdf5<bool>(file_id, "RSTEP");;
+    std::vector<int> rstep = Opm::Hdf5IO::get_1d_hdf5<int>(file_id, "RSTEP");;
 
     for (size_t m = 0; m < rstep.size(); m++)
-        if (rstep[m])
+        if (rstep[m] == 1)
             seqIndex.push_back(m);
 
     nTstep = rstep.size();
@@ -636,11 +640,12 @@ void ESmry::Load_from_h5smry(const std::vector<int>& keywIndVect) const
 {
     hid_t file_id = H5Fopen( h5FileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
 
-    for (int ind : keywIndVect)
-        vectorData[ind] = Opm::Hdf5IO::get_1d_from_2d_hdf5<float>(file_id, "SMRYDATA", static_cast<int>(ind), nTstep);
+    for (int ind : keywIndVect){
+        auto it = arrayPos[0].find(ind);
+        vectorData[ind] = Opm::Hdf5IO::get_1d_from_2d_hdf5<float>(file_id, "SMRYDATA", it->second, nTstep);
+    }
 
     H5Fclose(file_id);
-
 }
 
 
@@ -1177,8 +1182,8 @@ bool ESmry::make_h5smry_file_eclrun()
         std::vector<int> mod_startdat = startd;
         mod_startdat.push_back(0);
 
-        //std::vector<int> version = {1, 7};
-        //std::vector<int> checksum = {-1625148362};
+        std::vector<int> version = {1, 7};
+        std::vector<int> checksum = {633668666};
 
 
         //Opm::Hdf5IO::write_1d_hdf5(file_id, "/general/checksum",  checksum );
@@ -1187,7 +1192,7 @@ bool ESmry::make_h5smry_file_eclrun()
 
         std::vector<float> time = get("TIME");
         Opm::Hdf5IO::write_1d_hdf5(file_id, "/general/time",  time );
-        //Opm::Hdf5IO::write_1d_hdf5(file_id, "/general/version",  version );
+        Opm::Hdf5IO::write_1d_hdf5(file_id, "/general/version",  version );
 
         this->LoadData();
 
