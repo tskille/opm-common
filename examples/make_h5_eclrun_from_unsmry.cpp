@@ -26,7 +26,7 @@
 #include <iomanip>
 
 #include "hdf5.h"    // C lib
-#include <opm/io/eclipse/Hdf5Util.hpp>
+#include <opm/io/hdf5/Hdf5Util.hpp>
 
 
 #if HAVE_OPENMP
@@ -63,10 +63,8 @@ std::vector<std::string> init_h5_file(hid_t file_id, std::string name, std::vect
 
     //std::cout << "writing name: '" << name << "'" << std::endl;
 
-    std::vector<int> checksum = {633668666};
+    //std::vector<int> checksum = {633668666};
     std::vector<int> version = {1, 7};
-
-    //Opm::Hdf5IO::write_1d_hdf5(file_id, "/general/checksum",  checksum);
 
     Opm::Hdf5IO::write_str_variable(file_id, "/general/name", name);
 
@@ -170,11 +168,22 @@ int main(int argc, char **argv) {
 
     std::string name = smspecFileName.stem().string() + std::string(".SMSPEC");
 
-    hid_t file_id = H5Fcreate(h5FileName.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+
+    hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5Pset_libver_bounds(fapl_id, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST);
+
+    hid_t file_id = H5Fcreate(h5FileName.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
 
     auto dset_name_list = init_h5_file(file_id, name, keywords, startd );
 
-    H5Fclose(file_id);
+    herr_t testswmr = H5Fstart_swmr_write(file_id);
+
+    if (testswmr < 0){
+        std::cout << "swmr did not work !" << std::endl;
+        exit(1);
+    }
+
+    //H5Fclose(file_id);
 
     auto lap2 = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds2 = lap2-lap1;
@@ -194,28 +203,37 @@ int main(int argc, char **argv) {
 
     auto arrayList = unsmry_file.getList();
 
+    size_t nSteps = 0;
+
+    for (size_t n = 0; n < arrayList.size(); n++){
+        auto element = arrayList[n];
+        if (std::get<0>(element) == "PARAMS")
+            nSteps++;
+    }
+
+
     size_t tind = 0;
 
     double elapsed_writing = 0.0;
 
-    for (size_t n = 0; n < arrayList.size(); n++){
+    //for (size_t n = 0; n < arrayList.size(); n++){
+
+    for (size_t n = 0; n < 30; n++){
         auto element = arrayList[n];
 
-       // std::string arrName = std::get<0>(element);
-
-        //if (arrName == "PARAMS"){
         if (std::get<0>(element) == "PARAMS"){
 
             std::vector<float> ts_data = unsmry_file.get<float>(n);
 
-            std::cout << "adding timestep: " << std::setw(4) << tind;
+            std::cout << "adding step: " << std::setw(4) << tind+1;
+            std::cout << "/ " << std::setw(4) << nSteps;
             std::cout << "  time: " << std::setw(8) << std::setprecision(2) << std::fixed << ts_data[0] << " .. " << std::flush;
 
             auto lap00 = std::chrono::system_clock::now();
 
-            file_id = H5Fopen(h5FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+            //file_id = H5Fopen(h5FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
             add_timestep(file_id, ts_data, dset_name_list);
-            H5Fclose(file_id);
+            //H5Fclose(file_id);
 
             auto lap01 = std::chrono::system_clock::now();
             std::chrono::duration<double> elapsed_ts = lap01-lap00;
@@ -228,6 +246,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    H5Fclose(file_id);
 
     std::cout << "\nFinished, all good \n\n";
 

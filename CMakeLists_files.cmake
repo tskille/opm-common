@@ -244,7 +244,6 @@ if(ENABLE_ECL_OUTPUT)
           src/opm/io/eclipse/EclFile.cpp
           src/opm/io/eclipse/EclOutput.cpp
           src/opm/io/eclipse/EclUtil.cpp
-          src/opm/io/eclipse/Hdf5Util.cpp
           src/opm/io/eclipse/EGrid.cpp
           src/opm/io/eclipse/ERft.cpp
           src/opm/io/eclipse/ERst.cpp
@@ -259,6 +258,8 @@ if(ENABLE_ECL_OUTPUT)
           src/opm/io/eclipse/rst/segment.cpp
           src/opm/io/eclipse/rst/state.cpp
           src/opm/io/eclipse/rst/well.cpp
+          src/opm/io/hdf5/Hdf5Util.cpp
+          src/opm/io/hdf5/H5Smry.cpp
           src/opm/output/eclipse/AggregateActionxData.cpp
           src/opm/output/eclipse/AggregateConnectionData.cpp
           src/opm/output/eclipse/AggregateGroupData.cpp
@@ -389,6 +390,7 @@ if(ENABLE_ECL_OUTPUT)
           tests/test_ArrayDimChecker.cpp
           tests/test_EclipseIO.cpp
           tests/test_DoubHEAD.cpp
+          tests/test_Hdf5IO.cpp
           tests/test_InteHEAD.cpp
           tests/test_LinearisedOutputTable.cpp
           tests/test_LogiHEAD.cpp
@@ -483,7 +485,8 @@ if(ENABLE_ECL_INPUT)
     examples/make_h5smry.cpp
     examples/test_lod_esmry.cpp
     examples/make_h5_eclrun_from_unsmry.cpp
-    examples/make_h5_from_unsmry.cpp
+    examples/make_h5smry_from_unsmry.cpp
+    examples/make_h5smry_swmr_from_unsmry.cpp
   )
 endif()
 

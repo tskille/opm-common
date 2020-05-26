@@ -58,7 +58,7 @@ public:
     void LoadData() const;
 
     bool make_lodsmry_file();
-    bool make_h5smry_file();
+    bool make_h5smry_file() const;
     bool make_h5smry_file_eclrun();
 
     std::chrono::system_clock::time_point startdate() const { return startdat; }
@@ -141,7 +141,7 @@ private:
     void inspect_lodsmry();
     void Load_from_lodsmry(const std::vector<int>& keywIndVect) const;
 
-    void inspect_h5smry();
+    //void inspect_h5smry();
     void Load_from_h5smry(const std::vector<int>& keywIndVect) const;
 };
 

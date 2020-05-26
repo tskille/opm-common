@@ -27,37 +27,31 @@
 
 namespace Opm {   namespace Hdf5IO {
 
-    void  write_str_variable(hid_t file_id, const char* data_set_name, const std::string& variable);
-
-    void write_array_1d(hid_t file_id, const char* data_set_name, hid_t datatype_id, const void * data, size_t size, bool unlimited);
+    void  write_str_variable(hid_t file_id, const std::string& data_set_name, const std::string& variable);
+    std::string  read_str_variable(hid_t file_id, const std::string& data_set_name);
 
     template <typename T>
     void write_1d_hdf5(hid_t file_id, const std::string& data_set_name,
                    const std::vector<T>& dataVect, bool unlimited = false );
 
     template <typename T>
-    void add_value_1d(hid_t dataset_id, hid_t datatype_id, T value);
-
-    template <typename T>
     void add_value_to_1d_hdf5(hid_t file_id, const std::string& data_set_name, T value);
 
     template <typename T>
     void write_2d_hdf5(hid_t file_id, const std::string& data_set_name,
-                   const std::vector<std::vector<T>>& dataVect, bool unlimited2 = false);
+                       const std::vector<std::vector<T>>& dataVect, bool unlimited2 = false);
 
-    void add_1d_to_2d(hid_t file_id, const std::string& data_set_name, const std::vector<float>& vectData);
-
+    template <typename T>
+    void add_1d_to_2d_hdf5(hid_t file_id, const std::string& data_set_name, const std::vector<T>& vectData);
 
     template <typename T>
     std::vector<T> get_1d_hdf5(hid_t file_id, const std::string& data_set_name);
 
-    H5T_class_t open_1d_dset(hid_t file_id, const char* name, hid_t& dataset_id, hid_t& memspace,
-                             hid_t& dataspace, size_t& size, size_t& size_e);
-
+    template <typename T>
+    std::vector<std::vector<T>> get_2d_hdf5(hid_t file_id, const std::string& data_set_name);
 
     template <typename T>
-    std::vector<T> get_1d_from_2d_hdf5(hid_t file_id, const std::string& data_set_name, int vInd, int nTSteps);
-
+    std::vector<T> get_1d_from_2d_hdf5(hid_t file_id, const std::string& data_set_name, int vInd);
 
 }  } // namespace Opm::Hdf5IO
 

@@ -23,7 +23,7 @@
 #include <opm/io/eclipse/EclUtil.hpp>
 #include <opm/io/eclipse/EclOutput.hpp>
 
-#include <opm/io/eclipse/Hdf5Util.hpp>
+#include <opm/io/hdf5/Hdf5Util.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -121,9 +121,9 @@ ESmry::ESmry(const std::string &filename, bool loadBaseRunData) :
     lodEnabeled = false;
     h5Enabeled = false;
 
-    if ((!loadBaseRunData) && (Opm::filesystem::exists(h5FileName)))
-        h5Enabeled = true;
-    else if ((!loadBaseRunData) && (Opm::filesystem::exists(lodFileName)))
+    //if ((!loadBaseRunData) && (Opm::filesystem::exists(h5FileName)))
+    //    h5Enabeled = true;
+    if ((!loadBaseRunData) && (Opm::filesystem::exists(lodFileName)))
         lodEnabeled = true;
 
     Opm::filesystem::path path = Opm::filesystem::current_path();
@@ -330,13 +330,16 @@ ESmry::ESmry(const std::string &filename, bool loadBaseRunData) :
         vectorLoaded.push_back(false);
     }
 
+/*
     if (h5Enabeled) {
         // inspecting hdf5 data file. Loading from h5smry file only possible if
         // loadBaseRunData=false
 
         inspect_h5smry();
 
-    } else if (lodEnabeled) {
+    } else if (lodEnabeled) {  */
+
+    if (lodEnabeled) {
         // inspecting formatted or binary lod file. lodsmry possible only if
         // loadBaseRunData=false
 
@@ -550,20 +553,12 @@ void ESmry::inspect_lodsmry()
 
     fileH.close();
 }
-
+/*
 void ESmry::inspect_h5smry()
 {
-    std::cout << "\n!Info: ESmry is using h5 file, not UNSMRY\n" << std::endl;
+    std::cout << "\n!Info: ESmry is using h5smry file, not UNSMRY\n" << std::endl;
 
-    hid_t file_id = H5Fopen( h5FileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-
-    /*
-    std::vector<std::string> keycheck = Opm::Hdf5IO::get_1d_hdf5<std::string>(file_id, "KEYWORDS");
-
-    for (size_t n = 0; n < nVect; n++)
-        if (keyword[n] != keycheck[n])
-            OPM_THROW(std::invalid_argument, "keycheck not maching keyword array");
-    */
+    hid_t file_id = H5Fopen( h5FileName.c_str(), H5F_ACC_RDONLY|H5F_ACC_SWMR_READ, H5P_DEFAULT);
 
     std::vector<int> rstep = Opm::Hdf5IO::get_1d_hdf5<int>(file_id, "RSTEP");;
 
@@ -573,9 +568,8 @@ void ESmry::inspect_h5smry()
 
     nTstep = rstep.size();
 
-    H5Fclose(file_id);
 }
-
+*/
 
 
 std::string ESmry::read_string_from_disk(std::fstream& fileH, uint64_t size) const
@@ -638,11 +632,13 @@ void ESmry::Load_from_lodsmry(const std::vector<int>& keywIndVect) const
 
 void ESmry::Load_from_h5smry(const std::vector<int>& keywIndVect) const
 {
-    hid_t file_id = H5Fopen( h5FileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    //hid_t file_id = H5Fopen( h5FileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    hid_t file_id = H5Fopen( h5FileName.c_str(), H5F_ACC_RDONLY|H5F_ACC_SWMR_READ, H5P_DEFAULT);
 
     for (int ind : keywIndVect){
         auto it = arrayPos[0].find(ind);
-        vectorData[ind] = Opm::Hdf5IO::get_1d_from_2d_hdf5<float>(file_id, "SMRYDATA", it->second, nTstep);
+        //vectorData[ind] = Opm::Hdf5IO::get_1d_from_2d_hdf5<float>(file_id, "SMRYDATA", it->second, nTstep);
+        vectorData[ind] = Opm::Hdf5IO::get_1d_from_2d_hdf5<float>(file_id, "SMRYDATA", it->second);
     }
 
     H5Fclose(file_id);
@@ -1096,7 +1092,7 @@ bool ESmry::make_lodsmry_file()
 }
 
 
-bool ESmry::make_h5smry_file()
+bool ESmry::make_h5smry_file() const
 {
     // check that loadBaseRunData is not set, this function only works for single smspec files
     // function will not replace existing lodsmry files (since this is already loaded by this class)
@@ -1112,30 +1108,51 @@ bool ESmry::make_h5smry_file()
 
     smryDataFile = path / rootName += ".H5SMRY";
 
-    if (Opm::EclIO::fileExists(smryDataFile))
+    //if (Opm::EclIO::fileExists(smryDataFile))
+    if (false)
     {
         return false;
 
     } else {
 
-        std::cout << smryDataFile << std::endl;
-
         hid_t file_id = H5Fcreate(smryDataFile.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
 
-        Opm::Hdf5IO::write_1d_hdf5(file_id, "KEYWORDS",  keyword );
+        //std::string name = inputFileName.stem().string() + ".SMSPEC";
+        //Opm::Hdf5IO::write_str_variable(file_id, "SMSPEC", name);
 
-        std::vector<bool> is_rstep;
+        std::vector<int> version = {0};
+        Opm::Hdf5IO::write_1d_hdf5(file_id, "VERSION", version );
+
+        Opm::Hdf5IO::write_1d_hdf5(file_id, "START_DATE", startd );
+
+        Opm::Hdf5IO::write_1d_hdf5(file_id, "KEYS", keyword );
+
+        std::vector<std::string> units;
+
+        units.reserve(keyword.size());
+
+        for (auto key: keyword){
+            auto it = kwunits.find(key);
+            units.push_back(it->second);
+        }
+
+        Opm::Hdf5IO::write_1d_hdf5(file_id, "UNITS", units );
+
+        std::vector<int> is_rstep;
         is_rstep.reserve(timeStepList.size());
 
         for (size_t i = 0; i < timeStepList.size(); i++)
             if(std::find(seqIndex.begin(), seqIndex.end(), i) != seqIndex.end())
-                is_rstep.push_back(true);
+                is_rstep.push_back(1);
             else
-                is_rstep.push_back(false);
+                is_rstep.push_back(0);
 
         Opm::Hdf5IO::write_1d_hdf5(file_id, "RSTEP",  is_rstep );
 
         this->LoadData();
+
+        //std::cout << vectorData.size() << std::endl;
+        //std::cout << vectorData[0].size() << std::endl;
 
         Opm::Hdf5IO::write_2d_hdf5(file_id, "SMRYDATA",  vectorData );
 
@@ -1168,12 +1185,8 @@ bool ESmry::make_h5smry_file_eclrun()
 
     } else {
 
-        //Opm::filesystem::path smspec_file = inputFileName.stem() += ".SMSPEC";
-
         std::string smspec_file(inputFileName.stem());
         smspec_file = smspec_file  + ".SMSPEC";
-
-        std::cout << smspec_file << std::endl;
 
         hid_t file_id = H5Fcreate(smryDataFile.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
 
@@ -1183,10 +1196,7 @@ bool ESmry::make_h5smry_file_eclrun()
         mod_startdat.push_back(0);
 
         std::vector<int> version = {1, 7};
-        std::vector<int> checksum = {633668666};
 
-
-        //Opm::Hdf5IO::write_1d_hdf5(file_id, "/general/checksum",  checksum );
         Opm::Hdf5IO::write_str_variable(file_id, "/general/name", smspec_file);
         Opm::Hdf5IO::write_1d_hdf5(file_id, "/general/start_date",  mod_startdat );
 
@@ -1219,9 +1229,6 @@ bool ESmry::make_h5smry_file_eclrun()
 
             group_name = group_name + std::string("/") + std::to_string(arrayPos[0][n]);
 
-            std::cout << n << ", " << keyword[n] << " pos: " << arrayPos[0][n];
-            std::cout << " group_name : '" << group_name << "'" << std::endl;
-
             group_id_summary = H5Gcreate2(file_id, group_name.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
             std::string array_name = group_name + std::string("/values");
@@ -1229,46 +1236,9 @@ bool ESmry::make_h5smry_file_eclrun()
             std::vector<float> data = get(keyword[n]);
 
             Opm::Hdf5IO::write_1d_hdf5(file_id, array_name,  data );
-
-
         }
 
-
-        //Opm::Hdf5IO::write_1d_hdf5<std::string>(file_id, "/general/name",  {smspec_file} );
-
-
         H5Gclose(group_id_general);
-        H5Fclose(file_id);
-
-        //for (int v : startd)
-        //    std::cout << v << std::endl;
-
-        //  std::chrono::system_clock::time_point startdat;
-
-        //std::cout << startdat.year()  << std::endl;
-
-
-    std::cout << "good so far in new make_h5" << std::endl;
-    exit(1);
-
-
-        Opm::Hdf5IO::write_1d_hdf5(file_id, "KEYWORDS",  keyword );
-
-        std::vector<bool> is_rstep;
-        is_rstep.reserve(timeStepList.size());
-
-        for (size_t i = 0; i < timeStepList.size(); i++)
-            if(std::find(seqIndex.begin(), seqIndex.end(), i) != seqIndex.end())
-                is_rstep.push_back(true);
-            else
-                is_rstep.push_back(false);
-
-        Opm::Hdf5IO::write_1d_hdf5(file_id, "RSTEP",  is_rstep );
-
-        this->LoadData();
-
-        Opm::Hdf5IO::write_2d_hdf5(file_id, "SMRYDATA",  vectorData );
-
         H5Fclose(file_id);
 
         return true;

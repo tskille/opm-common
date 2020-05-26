@@ -29,7 +29,13 @@
 
 #include <opm/io/eclipse/ESmry.hpp>
 #include <opm/io/eclipse/EclUtil.hpp>
+
+#include <opm/io/hdf5/Hdf5Util.hpp>
+
 #include <opm/common/utility/FileSystem.hpp>
+
+#include <opm/io/hdf5/H5Smry.hpp>
+
 
 #include <iomanip>
 
@@ -66,16 +72,17 @@ int main(int argc, char **argv) {
         }
     }
 
+
     std::vector<std::string> vectorList = {"TIME", "FOPT", "WOPR:P-13P", "RPR:1", "GGOR:EFB", "GEFF:EFBINJ", "GEFF:ECFBARFT"};
 
     int argOffset = optind;
 
     auto lap0 = std::chrono::system_clock::now();
 
-    std::vector<std::unique_ptr<Opm::EclIO::ESmry>> smry_vect;
+    std::vector<std::unique_ptr<Opm::Hdf5IO::H5Smry>> smry_vect;
 
     for (int f = argOffset; f < argc; f ++){
-        smry_vect.emplace_back(new Opm::EclIO::ESmry(argv[f]));
+        smry_vect.emplace_back(new Opm::Hdf5IO::H5Smry(argv[f]));
     }
 
 
@@ -95,13 +102,15 @@ int main(int argc, char **argv) {
     std::cout << "\nruntime for opening          : " << elapsed_seconds1.count() << " seconds" << std::endl;
     std::cout << "runtime for loaing vectorlist: " << elapsed_seconds2.count() << " seconds\n" << std::endl;
 
+
+    /*
     auto time = smry_vect[0]->get("TIME");
     auto fopr = smry_vect[0]->get("FOPR");
 
     for (auto val : fopr)
         std::cout << val << std::endl;
 
-
+    */
 
     return 0;
 }

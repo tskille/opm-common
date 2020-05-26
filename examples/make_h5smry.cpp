@@ -43,13 +43,23 @@ static void printHelp() {
 }
 
 
+/*
+    std::cout << "H5_VERS_MAJOR     :  " << H5_VERS_MAJOR << std::endl;
+    std::cout << "H5_VERS_MINOR     :  " << H5_VERS_MINOR << std::endl;
+    std::cout << "H5_VERS_RELEASE   :  " << H5_VERS_RELEASE << std::endl;
+    std::cout << "H5_VERS_SUBRELEASE:  " << H5_VERS_SUBRELEASE << std::endl;
+    std::cout << "H5_VERS_INFO      :  " << H5_VERS_INFO << std::endl;
+*/
+
+
 int main(int argc, char **argv) {
 
     int c                          = 0;
     int max_threads                = -1;
     bool force                     = false;
+    bool eclrun_layout             = false;
 
-    while ((c = getopt(argc, argv, "fn:h")) != -1) {
+    while ((c = getopt(argc, argv, "fn:he")) != -1) {
         switch (c) {
         case 'f':
             force = true;
@@ -57,6 +67,9 @@ int main(int argc, char **argv) {
         case 'h':
             printHelp();
             return 0;
+        case 'e':
+            eclrun_layout=true;
+            break;
         case 'n':
             max_threads = atoi(optarg);
             break;
@@ -70,15 +83,24 @@ int main(int argc, char **argv) {
     Opm::filesystem::path inputFileName = argv[optind];
 
     Opm::filesystem::path h5FileName = inputFileName.parent_path() / inputFileName.stem();
-    h5FileName = h5FileName += ".h5";
 
+    if (eclrun_layout)
+        h5FileName = h5FileName += ".h5";
+    else
+        h5FileName = h5FileName += ".H5SMRY";
 
-    if (Opm::EclIO::fileExists(h5FileName) && (true))
+    if (Opm::EclIO::fileExists(h5FileName) && (force))
         remove (h5FileName);
 
     Opm::EclIO::ESmry smryFile(argv[optind]);
-    if (!smryFile.make_h5smry_file_eclrun()){
-        std::cout << "\n! Warning, smspec already have one h5 file, existing kept use option -f to replace this" << std::endl;
+
+    if (eclrun_layout){
+        if (!smryFile.make_h5smry_file_eclrun())
+            std::cout << "\n! Warning, smspec already have one h5 file, existing kept use option -f to replace this" << std::endl;
+    } else {
+        if (!smryFile.make_h5smry_file())
+            std::cout << "\n! Warning, smspec already have one H5SMRY file, existing kept use option -f to replace this" << std::endl;
+
     }
 
     return 0;

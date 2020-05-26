@@ -28,14 +28,14 @@
 #include <cstdlib>
 
 #include "hdf5.h"    // C lib
-#include <opm/io/eclipse/Hdf5Util.hpp>
+#include <opm/io/hdf5/Hdf5Util.hpp>
 
 
 #if HAVE_OPENMP
 #include <omp.h>
 #endif
 
-//#include <opm/io/eclipse/ESmry.hpp>
+#include <opm/io/eclipse/ESmry.hpp>
 #include <opm/io/eclipse/EclFile.hpp>
 #include <opm/io/eclipse/EclUtil.hpp>
 #include <opm/common/utility/FileSystem.hpp>
@@ -55,11 +55,20 @@ static void printHelp() {
               << "-h Print help and exit.\n\n";
 }
 
-void init_h5_file(hid_t file_id, std::string name, std::vector<std::string>& keywords, std::vector<int> startd )
+void init_h5_file(hid_t file_id, std::string name, const std::vector<std::string>& keywords,
+                  const std::vector<std::string>& units, const std::vector<int>& startd )
 {
-    Opm::Hdf5IO::write_str_variable(file_id, "SMSPEC", name);
+
+    std::vector<int> version = {0};
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "VERSION", version );
 
     Opm::Hdf5IO::write_1d_hdf5<int>(file_id, "RSTEP",  {}, true);
+
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "START_DATE", startd );
+
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "KEYS", keywords );
+
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "UNITS", units );
 
     size_t nVect = keywords.size();
 
@@ -72,24 +81,24 @@ void init_h5_file(hid_t file_id, std::string name, std::vector<std::string>& key
     Opm::Hdf5IO::write_2d_hdf5<float>(file_id, "SMRYDATA", smrydata, true);
 }
 
+/*
+    std::cout << "H5_VERS_MAJOR     :  " << H5_VERS_MAJOR << std::endl;
+    std::cout << "H5_VERS_MINOR     :  " << H5_VERS_MINOR << std::endl;
+    std::cout << "H5_VERS_RELEASE   :  " << H5_VERS_RELEASE << std::endl;
+    std::cout << "H5_VERS_SUBRELEASE:  " << H5_VERS_SUBRELEASE << std::endl;
+    std::cout << "H5_VERS_INFO      :  " << H5_VERS_INFO << std::endl;
+*/
+
 
 int main(int argc, char **argv) {
 
     int c                          = 0;
-    int max_threads                = -1;
-    bool force                     = false;
 
-    while ((c = getopt(argc, argv, "fn:h")) != -1) {
+    while ((c = getopt(argc, argv, "h")) != -1) {
         switch (c) {
-        case 'f':
-            force = true;
-            break;
         case 'h':
             printHelp();
             return 0;
-        case 'n':
-            max_threads = atoi(optarg);
-            break;
         default:
             return EXIT_FAILURE;
         }
@@ -97,7 +106,8 @@ int main(int argc, char **argv) {
 
     int argOffset = optind;
 
-    Opm::filesystem::path inputFileName = argv[optind];
+    Opm::filesystem::path inputFileName = argv[argOffset];
+
 
     Opm::filesystem::path h5FileName = inputFileName.parent_path() / inputFileName.stem();
     Opm::filesystem::path unsmryFileName = inputFileName.parent_path() / inputFileName.stem();
@@ -114,6 +124,58 @@ int main(int argc, char **argv) {
     if (Opm::EclIO::fileExists(h5FileName) && (true))
         remove (h5FileName);
 
+    ESmry smry1(inputFileName);
+
+    smry1.LoadData();
+
+    std::vector<std::vector<float>> vectData;
+    std::vector<std::vector<float>> tsData;
+
+    std::vector<std::string> keywords = smry1.keywordList();
+
+    std::vector<std::string> units;
+    units.reserve(keywords.size());
+
+    for (auto key : keywords)
+        units.push_back(smry1.get_unit(key));
+
+    size_t nVect = keywords.size();
+    size_t nTstep = smry1.numberOfTimeSteps();
+
+    vectData.resize(nVect, {});
+
+    for (size_t n = 0; n < keywords.size(); n++){
+        vectData[n] = smry1.get(keywords[n]);
+    }
+
+    std::cout << "\nnVect : " << nVect << std::endl;
+    std::cout << "nTstep: " << nTstep << std::endl;
+
+    auto timev = smry1.get("TIME");
+    auto timevr = smry1.get_at_rstep("TIME");
+
+    std::vector<int> rstep;
+    rstep.reserve(nTstep);
+
+    for (size_t n = 0; n < nTstep; n++){
+
+        auto it = std::find(timevr.begin(), timevr.end(), timev[n]);
+
+        if (it == timevr.end())
+            rstep.push_back(0);
+        else
+            rstep.push_back(1);
+    }
+
+    tsData.resize(nTstep, {});
+
+    for (size_t n = 0; n < nTstep; n++){
+        tsData[n].reserve(nVect);
+        for (size_t v = 0; v < nVect; v++){
+            tsData[n].push_back(vectData[v][n]);
+        }
+    }
+
     auto lap0 = std::chrono::system_clock::now();
 
     EclFile smspecfile(inputFileName);
@@ -124,17 +186,26 @@ int main(int argc, char **argv) {
     std::chrono::duration<double> elapsed_seconds1 = lap1-lap0;
     std::cout << "\nruntime opening and loading smspec : " << elapsed_seconds1.count() << " seconds" << std::endl;
 
-
-    auto keywords = smspecfile.get<std::string>("KEYWORDS");
     auto startd = smspecfile.get<int>("STARTDAT");
 
     std::string name = smspecFileName.stem().string() + std::string(".SMSPEC");
 
-    hid_t file_id = H5Fcreate(h5FileName.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5Pset_libver_bounds(fapl_id, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST);
 
-    init_h5_file(file_id, name, keywords, startd );
+    hid_t file_id = H5Fcreate(h5FileName.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
 
-    H5Fclose(file_id);
+    init_h5_file(file_id, name, keywords, units, startd);
+
+
+    herr_t testswmr = H5Fstart_swmr_write(file_id);
+
+    if (testswmr < 0){
+        std::cout << "swmr did not work !" << std::endl;
+        exit(1);
+    }
+
+    //H5Fclose(file_id);
 
     auto lap2 = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds2 = lap2-lap1;
@@ -159,43 +230,32 @@ int main(int argc, char **argv) {
     double elapsed_writing = 0.0;
 
     // Turns automatic error printing on or off.
-    herr_t status = H5Eset_auto2(NULL, NULL, NULL);
+    //herr_t status = H5Eset_auto2(NULL, NULL, NULL);
 
-    for (size_t n = 0; n < arrayList.size(); n++){
-        auto element = arrayList[n];
+    //file_id = H5Fopen(h5FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
 
-       // std::string arrName = std::get<0>(element);
+    // https://stackoverflow.com/questions/34906652/does-hdf5-support-concurrent-reads-or-writes-to-different-files
 
-        //if (arrName == "PARAMS"){
-        if (std::get<0>(element) == "PARAMS"){
+    // That is, the --enable-threadsafe and --enable-parallel flags are mutually exclusive
 
-            std::vector<float> ts_data = unsmry_file.get<float>(n);
 
-            std::cout << "adding timestep: " << std::setw(4) << tind;
-            std::cout << "  time: " << std::setw(8) << std::setprecision(2) << std::fixed << ts_data[0] << " .. " << std::flush;
+    for (size_t n = 0; n < tsData.size(); n++){
+
+        std::vector<float> ts_vector = tsData[n];
+
+        if (true){
+
+            //std::vector<float> ts_data = unsmry_file.get<float>(n);
+
+            std::cout << "adding step: " << std::setw(4) << tind+1;
+            std::cout << "/ " << std::setw(4) << nTstep;
+            std::cout << "  time: " << std::setw(8) << std::setprecision(2) << std::fixed << ts_vector[0] << " .. " << std::flush;
 
             auto lap00 = std::chrono::system_clock::now();
 
-            file_id = H5Fopen(h5FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
-
-            if ( file_id < 0) {
-                size_t n = 0;
-                // re-try to open 100 times, if still fails, throw exception
-                while ((file_id < 0) && ( ++n < 100)){
-                    std::this_thread::sleep_for(std::chrono::microseconds(5000));
-                    file_id = H5Fopen(h5FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
-                }
-
-                if (file_id < 0)
-                    throw std::runtime_error ("not able to open file with " + std::to_string(n) + " attempts");
-
-            }
-
             // 1 for is report step, 0 = is not report step (only time step)
-            Opm::Hdf5IO::add_value_to_1d_hdf5(file_id, "RSTEP", 1);
-            Opm::Hdf5IO::add_1d_to_2d(file_id, "SMRYDATA", ts_data);
-
-            H5Fclose(file_id);
+            Opm::Hdf5IO::add_value_to_1d_hdf5(file_id, "RSTEP", rstep[n]);
+            Opm::Hdf5IO::add_1d_to_2d_hdf5(file_id, "SMRYDATA", ts_vector);
 
             auto lap01 = std::chrono::system_clock::now();
             std::chrono::duration<double> elapsed_ts = lap01-lap00;
@@ -207,13 +267,12 @@ int main(int argc, char **argv) {
 
             tind++;
 
-            //std::chrono::duration<double, std::milli> waitTime = 50;
-            std::this_thread::sleep_for(std::chrono::microseconds(50000));
-
-
+            //std::this_thread::sleep_for(std::chrono::microseconds(50000));
+            //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
     }
 
+    H5Fclose(file_id);
 
     std::cout << "\nFinished, all good \n\n";
 

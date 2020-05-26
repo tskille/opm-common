@@ -94,34 +94,34 @@ BOOST_AUTO_TEST_CASE(TestEclFile_X231) {
     std::string arrName = "TESTX231";
 
     std::vector<int> ivect(10);
-    std::iota(ivect.begin(), ivect.end(), -4);    
+    std::iota(ivect.begin(), ivect.end(), -4);
 
     {
         std::ofstream ofileH;
-        ofileH.open(filename, std::ios_base::binary);    
+        ofileH.open(filename, std::ios_base::binary);
 
-        int size = static_cast<int>((-1) * std::pow(2,31) + 10); 
+        int size = static_cast<int>((-1) * std::pow(2,31) + 10);
 
         write_header(ofileH, arrName, -1, std::string("X231"));
         write_header(ofileH, arrName, size, std::string("INTE"));
 
         int sizeData = ivect.size()*sizeof(int);
         sizeData = flipEndianInt(sizeData);
-        
+
         ofileH.write(reinterpret_cast<char*>(&sizeData), sizeof(sizeData));
 
         for (auto v : ivect){
-            int fval = flipEndianInt(v); 
+            int fval = flipEndianInt(v);
             ofileH.write(reinterpret_cast<char*>(&fval), sizeof(fval));
         }
-        
+
         ofileH.write(reinterpret_cast<char*>(&sizeData), sizeof(sizeData));
         ofileH.close();
     }
-    
+
     EclFile test1(filename);
     auto array = test1.get<int>(arrName);
-    
+
     for (size_t n = 0; n < 10; n++){
         BOOST_CHECK_EQUAL(array[n], ivect[n]);
     }
