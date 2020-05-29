@@ -22,6 +22,8 @@
 #include <opm/io/eclipse/EclFile.hpp>
 #include <opm/io/eclipse/EclUtil.hpp>
 #include <opm/io/eclipse/EclOutput.hpp>
+#include <opm/io/hdf5/Hdf5Util.hpp>
+
 
 #include <algorithm>
 #include <chrono>
@@ -35,6 +37,8 @@
 #include <fstream>
 #include <cmath>
 #include <cstring>
+#include <ctime>
+
 
 /*
 
@@ -74,8 +78,13 @@ std::chrono::system_clock::time_point make_date(const std::vector<int>& datetime
         second = total_usec / 1000000;
     }
 
+    //Opm::TimeStampUTC start_date = Opm::TimeStampUTC{ Opm::TimeStampUTC::YMD{ year, month, day}}.hour(hour).minutes(minute).seconds(second).microseconds(1234);
 
     const auto ts = Opm::TimeStampUTC{ Opm::TimeStampUTC::YMD{ year, month, day}}.hour(hour).minutes(minute).seconds(second);
+
+    //std::cout << "in make date,  sec: " << start_date.seconds() << "\n";
+    //std::cout << "in make date,  u sec: " << start_date.microseconds() << "\n";
+
     return std::chrono::system_clock::from_time_t( Opm::asTimeT(ts) );
 }
 
@@ -165,6 +174,7 @@ ESmry::ESmry(const std::string &filename, bool loadBaseRunData) :
         std::vector<std::string> combindKeyList;
         combindKeyList.reserve(dimens[0]);
 
+        startd = smspecList.back().get<int>("STARTDAT");
         this->startdat = make_date(smspecList.back().get<int>("STARTDAT"));
 
         for (unsigned int i=0; i<keywords.size(); i++) {
@@ -229,6 +239,7 @@ ESmry::ESmry(const std::string &filename, bool loadBaseRunData) :
         std::vector<std::string> combindKeyList;
         combindKeyList.reserve(dimens[0]);
 
+        startd = smspecList.back().get<int>("STARTDAT");
         this->startdat = make_date(smspecList.back().get<int>("STARTDAT"));
 
         for (size_t i = 0; i < keywords.size(); i++) {
@@ -1032,6 +1043,67 @@ bool ESmry::make_lodsmry_file()
         return true;
     }
 }
+
+
+bool ESmry::make_h5smry_file() const
+{
+    if (!fromSingleRun)
+        OPM_THROW(std::invalid_argument, "creating h5smry file only possible when loadBaseRunData=false");
+
+    Opm::filesystem::path path = inputFileName.parent_path();
+    Opm::filesystem::path rootName = inputFileName.stem();
+    Opm::filesystem::path smryDataFile;
+
+    smryDataFile = path / rootName += ".H5SMRY";
+
+    hid_t file_id = H5Fcreate(smryDataFile.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+
+    std::vector<int> version = {0};
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "VERSION", version );
+
+    std::vector<int> start_date_vect =  startd;
+
+    if (start_date_vect.size() == 3){
+        start_date_vect.insert(start_date_vect.end(), {0, 0, 0, 0} );
+    } else {
+        start_date_vect.insert(start_date_vect.end(), {start_date_vect[5] % 1000000} );
+        start_date_vect[5] = start_date_vect[5] / 1000000;
+    }
+
+    Opm::Hdf5IO::write_1d_hdf5<int>(file_id, "START_DATE", start_date_vect );
+
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "KEYS", keyword );
+
+    std::vector<std::string> units;
+    units.reserve(keyword.size());
+
+    for (auto key: keyword) {
+        auto it = kwunits.find(key);
+        units.push_back(it->second);
+    }
+
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "UNITS", units );
+
+    std::vector<int> is_rstep;
+    is_rstep.reserve(timeStepList.size());
+
+    for (size_t i = 0; i < timeStepList.size(); i++)
+        if(std::find(seqIndex.begin(), seqIndex.end(), i) != seqIndex.end())
+            is_rstep.push_back(1);
+        else
+            is_rstep.push_back(0);
+
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "RSTEP",  is_rstep );
+
+    this->LoadData();
+
+    Opm::Hdf5IO::write_2d_hdf5(file_id, "SMRYDATA",  vectorData );
+
+    H5Fclose(file_id);
+
+    return true;
+}
+
 
 
 std::vector<std::string> ESmry::checkForMultipleResultFiles(const Opm::filesystem::path& rootN, bool formatted) const {

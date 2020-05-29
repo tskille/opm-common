@@ -58,6 +58,7 @@ public:
     void LoadData() const;
 
     bool make_lodsmry_file();
+    bool make_h5smry_file() const;
 
     std::chrono::system_clock::time_point startdate() const { return startdat; }
 
@@ -102,6 +103,7 @@ private:
     std::unordered_map<std::string, std::string> kwunits;
 
     std::chrono::system_clock::time_point startdat;
+    std::vector<int> startd;
 
     std::vector<std::string> checkForMultipleResultFiles(const Opm::filesystem::path& rootN, bool formatted) const;
 

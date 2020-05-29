@@ -257,6 +257,8 @@ if(ENABLE_ECL_OUTPUT)
           src/opm/io/eclipse/rst/segment.cpp
           src/opm/io/eclipse/rst/state.cpp
           src/opm/io/eclipse/rst/well.cpp
+          src/opm/io/hdf5/H5Smry.cpp
+          src/opm/io/hdf5/Hdf5Util.cpp
           src/opm/output/eclipse/AggregateActionxData.cpp
           src/opm/output/eclipse/AggregateConnectionData.cpp
           src/opm/output/eclipse/AggregateGroupData.cpp
@@ -478,6 +480,7 @@ if(ENABLE_ECL_INPUT)
     examples/opmhash.cpp
     examples/wellgraph.cpp
     examples/make_lodsmry.cpp
+    examples/make_h5smry.cpp
   )
 endif()
 
@@ -768,6 +771,8 @@ if(ENABLE_ECL_OUTPUT)
         opm/io/eclipse/rst/segment.hpp
         opm/io/eclipse/rst/state.hpp
         opm/io/eclipse/rst/well.hpp
+        opm/io/hdf5/H5Smry.hpp
+        opm/io/hdf5/Hdf5Util.hpp
         opm/output/data/Aquifer.hpp
         opm/output/data/Cells.hpp
         opm/output/data/Solution.hpp

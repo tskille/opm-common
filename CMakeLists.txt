@@ -232,6 +232,13 @@ if(ENABLE_ECL_INPUT)
                          LIBRARIES ${_libs}
                          WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/tests)
   endforeach()
+
+  foreach(test test_Hdf5IO)
+    opm_add_test(${test} CONDITION ENABLE_ECL_INPUT AND Boost_UNIT_TEST_FRAMEWORK_FOUND
+                         LIBRARIES ${_libs}
+                         WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/tests)
+  endforeach()
+
 endif()
 
 # Install build system files
