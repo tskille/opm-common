@@ -119,15 +119,13 @@ int main(int argc, char **argv) {
     std::cout << "runtime for loaing smspec    : " << elapsed_seconds2.count() << " seconds" << std::endl;
     std::cout << "runtime for loaing h5smry    : " << elapsed_seconds3.count() << " seconds\n" << std::endl;
 
+/*
+    auto time = h5smry_vect[0]->get("TIME");
+    //auto fopr = h5smry_vect[0]->get("FOPR");
 
-    /*
-    auto time = smry_vect[0]->get("TIME");
-    auto fopr = smry_vect[0]->get("FOPR");
-
-    for (auto val : fopr)
+    for (auto val : time)
         std::cout << val << std::endl;
-
-    */
+*/
 
     return 0;
 }

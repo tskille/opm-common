@@ -24,6 +24,8 @@
 #include "hdf5.h"    // C lib
 #include <string>
 
+#include <iostream>
+
 
 namespace Opm {   namespace Hdf5IO {
 
@@ -35,7 +37,14 @@ namespace Opm {   namespace Hdf5IO {
                    const std::vector<T>& dataVect, bool unlimited = false );
 
     template <typename T>
+    void set_value_for_1d_hdf5(hid_t file_id, const std::string& data_set_name, size_t pos, T value);
+
+    template <typename T>
     void add_value_to_1d_hdf5(hid_t file_id, const std::string& data_set_name, T value);
+
+    template <typename T>
+    void set_value_for_2d_hdf5(hid_t file_id, const std::string& data_set_name, size_t pos, const std::vector<T>& data);
+
 
     template <typename T>
     void write_2d_hdf5(hid_t file_id, const std::string& data_set_name,
@@ -48,10 +57,55 @@ namespace Opm {   namespace Hdf5IO {
     std::vector<T> get_1d_hdf5(hid_t file_id, const std::string& data_set_name);
 
     template <typename T>
-    std::vector<std::vector<T>> get_2d_hdf5(hid_t file_id, const std::string& data_set_name);
+    std::vector<std::vector<T>> get_2d_hdf5(hid_t file_id, const std::string& data_set_name, int size = -1);
 
     template <typename T>
-    std::vector<T> get_1d_from_2d_hdf5(hid_t file_id, const std::string& data_set_name, int vInd);
+    std::vector<T> get_1d_from_2d_hdf5(hid_t file_id, const std::string& data_set_name, int vInd, int size = -1 );
+
+
+    template <typename T>
+    void expand_1d_dset(hid_t file_id, const std::string& data_set_name, size_t increase_factor, T notUsedValue)
+    {
+        std::cout << "updating " << data_set_name << " .. ";
+
+        std::vector<T> data = get_1d_hdf5<T>(file_id, data_set_name);
+        std::vector<T> new_chunk;
+
+        size_t new_size = data.size() * increase_factor;
+        new_chunk.resize(new_size - data.size(), notUsedValue);
+
+        data.insert(data.end(), new_chunk.begin(), new_chunk.end());
+
+        H5Ldelete(file_id, data_set_name.c_str(), H5P_DEFAULT );
+
+        Opm::Hdf5IO::write_1d_hdf5<T>(file_id,data_set_name.c_str(),data);
+
+        std::cout << " ok ? " << std::endl;
+    }
+
+
+    template <typename T>
+    void expand_2d_dset(hid_t file_id, const std::string& data_set_name, size_t increase_factor, T notUsedValue)
+    {
+        std::cout << "updating " << data_set_name << " .. ";
+
+        auto data2d = get_2d_hdf5<T>(file_id, data_set_name);
+
+        size_t dim_d2 = data2d[0].size();
+        size_t n_extra = dim_d2*(increase_factor-1);
+
+        std::vector<T> new_chunk;
+        new_chunk.resize(n_extra, notUsedValue);
+
+        for (size_t n=0; n < data2d.size(); n++)
+            data2d[n].insert(data2d[n].end(), new_chunk.begin(), new_chunk.end());
+
+        H5Ldelete(file_id, data_set_name.c_str(), H5P_DEFAULT );
+
+        Opm::Hdf5IO::write_2d_hdf5<T>(file_id,data_set_name.c_str(), data2d);
+        std::cout << " ok ? " << std::endl;
+
+    }
 
 }  } // namespace Opm::Hdf5IO
 

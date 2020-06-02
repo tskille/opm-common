@@ -105,6 +105,15 @@ H5Smry::H5Smry(const std::string &filename)
 
     auto rstep = Opm::Hdf5IO::get_1d_hdf5<int>(file_id, "RSTEP");
 
+    std::cout << "before: " << rstep.size() << std::endl;
+
+    auto it = std::find(rstep.begin(), rstep.end(), -1);
+
+    if (it != rstep.end()){
+        size_t length = std::distance(rstep.begin(), it);
+        rstep.resize(length);
+    }
+
     nTstep = rstep.size();
 
     seqIndex.reserve(rstep.size());
@@ -145,7 +154,7 @@ void H5Smry::LoadData() const
 {
     hid_t file_id = H5Fopen( inputFileName.c_str(), H5F_ACC_RDONLY|H5F_ACC_SWMR_READ, H5P_DEFAULT);
 
-    vectorData = Opm::Hdf5IO::get_2d_hdf5<float>(file_id, "SMRYDATA");
+    vectorData = Opm::Hdf5IO::get_2d_hdf5<float>(file_id, "SMRYDATA", nTstep);
 
     H5Fclose(file_id);
 
@@ -164,7 +173,7 @@ void H5Smry::LoadData(const std::vector<std::string>& vectList) const
 
         auto it = keyIndex.find(key);
 
-        vectorData[it->second] = Opm::Hdf5IO::get_1d_from_2d_hdf5<float>(file_id, "SMRYDATA", it->second);
+        vectorData[it->second] = Opm::Hdf5IO::get_1d_from_2d_hdf5<float>(file_id, "SMRYDATA", it->second, nTstep);
         vectorLoaded[it->second] = true;
     }
 
@@ -179,7 +188,6 @@ const std::vector<float>& H5Smry::get(const std::string& name) const
         OPM_THROW(std::invalid_argument, "keyword " + name + " not found");
 
     auto it = keyIndex.find(name);
-
 
     if (!vectorLoaded[it->second]){
         LoadData({name});
