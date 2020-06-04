@@ -73,7 +73,8 @@ int main(int argc, char **argv) {
     }
 
 
-    std::vector<std::string> vectorList = {"TIME", "FOPT", "WOPR:P-13P", "RPR:1", "GGOR:EFB", "GEFF:EFBINJ", "GEFF:ECFBARFT"};
+    std::vector<std::string> vectorList = {"TIME", "FOPT", "FWCT", "FGPT", "WOPR:P-13P", "WGOR:P-13P", "WWCT:P-13P","WGPT:P-13P",
+        "RPR:1", "GGOR:EFB", "GEFF:EFBINJ", "GEFF:ECFBARFT"};
 
     int argOffset = optind;
 

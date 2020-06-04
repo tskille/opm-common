@@ -78,6 +78,8 @@ int main(int argc, char **argv) {
         }
     }
 
+    auto lap0 = std::chrono::system_clock::now();
+
     int argOffset = optind;
 
     Opm::filesystem::path inputFileName = argv[optind];
@@ -101,6 +103,11 @@ int main(int argc, char **argv) {
         if (!smryFile.make_h5smry_file())
             std::cout << "\n! Warning, smspec already have one H5SMRY file, existing kept use option -f to replace this" << std::endl;
     }
+
+    auto lap1 = std::chrono::system_clock::now();
+
+    std::chrono::duration<double> elapsed_seconds1 = lap1-lap0;
+    std::cout << "\nruntime creating h5smry from smspec/unsmry : " << elapsed_seconds1.count() << " seconds" << std::endl;
 
     return 0;
 }

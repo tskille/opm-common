@@ -21,6 +21,7 @@
 
 
 #include <vector>
+#include <array>
 #include "hdf5.h"    // C lib
 #include <string>
 
@@ -47,8 +48,8 @@ namespace Opm {   namespace Hdf5IO {
 
 
     template <typename T>
-    void write_2d_hdf5(hid_t file_id, const std::string& data_set_name,
-                       const std::vector<std::vector<T>>& dataVect, bool unlimited2 = false);
+    void write_2d_hdf5(hid_t file_id, const std::string& data_set_name, const std::vector<std::vector<T>>& dataVect,
+                       bool unlimited2 = false, std::array<int, 2> chunk_size={0,0});
 
     template <typename T>
     void add_1d_to_2d_hdf5(hid_t file_id, const std::string& data_set_name, const std::vector<T>& vectData);

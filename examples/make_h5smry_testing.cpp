@@ -84,44 +84,81 @@ void init_h5_file(hid_t file_id, std::string name, const std::vector<std::string
 
     Opm::Hdf5IO::write_2d_hdf5<float>(file_id, "SMRYDATA", smrydata);
 
-    //std::vector<float> tsdata;
-    //tsdata.resize(nVect, 1.2345);
-
-    //Opm::Hdf5IO::set_value_for_2d_hdf5<float>(file_id, "SMRYDATA", 4, tsdata);
-
-    //std::vector<float> notUsedtsdata;
-    //notUsedtsdata.resize(nVect, nanf(""));
-
-    //Opm::Hdf5IO::expand_2d_dset<float>(file_id, "SMRYDATA", 2, nanf(""));
-    /*
-    for (size_t r = 0; r < 195; r++){
-        Opm::Hdf5IO::set_value_for_1d_hdf5<int>(file_id, "RSTEP", r, static_cast<int>(r+2));
-    }
-
-    //Opm::Hdf5IO::add_value_to_1d_hdf5(file_id, "RSTEP", 1);
-
-    H5Fclose(file_id);
-    */
-
-    //std::cout << INT_MIN << std::endl;
-
     Opm::Hdf5IO::write_1d_hdf5(file_id, "START_DATE", startd );
 
     Opm::Hdf5IO::write_1d_hdf5(file_id, "KEYS", keywords );
 
     Opm::Hdf5IO::write_1d_hdf5(file_id, "UNITS", units );
 
-    //size_t nVect = keywords.size();
-/*
-    std::vector<std::vector<float>> smrydata;
-    smrydata.reserve(nVect);
-
-    for (size_t n=0; n < nVect; n++)
-        smrydata.push_back({});
-
-    Opm::Hdf5IO::write_2d_hdf5<float>(file_id, "SMRYDATA", smrydata, true);
-    */
 }
+
+void rewrie_h5_file(hid_t& file_id, size_t& maxTstep, std::string fileName, size_t inc_factor)
+{
+    std::cout << "\n > exceeded maximum number of time steps, start rewrite .."  << std::flush;
+
+    auto lap0 = std::chrono::system_clock::now();
+
+
+    H5Fclose(file_id);
+
+    file_id = H5Fopen( fileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+
+    auto startd = Opm::Hdf5IO::get_1d_hdf5<int>(file_id, "START_DATE");
+    auto version = Opm::Hdf5IO::get_1d_hdf5<int>(file_id, "VERSION");
+    auto keys = Opm::Hdf5IO::get_1d_hdf5<std::string>(file_id, "KEYS");
+    auto units = Opm::Hdf5IO::get_1d_hdf5<std::string>(file_id, "UNITS");
+
+    auto rstep = Opm::Hdf5IO::get_1d_hdf5<int>(file_id, "RSTEP");
+    auto smrydata = Opm::Hdf5IO::get_2d_hdf5<float>(file_id, "SMRYDATA");
+
+    H5Fclose(file_id);
+
+    size_t nTstep = maxTstep;
+
+
+    std::vector<int> new_chunk;
+    maxTstep = nTstep * inc_factor;
+
+    new_chunk.resize(maxTstep - nTstep, -1);
+    rstep.insert(rstep.end(), new_chunk.begin(), new_chunk.end());
+
+    std::vector<float> new_vect_chunk;
+    new_vect_chunk.resize(maxTstep - nTstep, nanf(""));
+
+    for (size_t n=0; n < smrydata.size(); n++)
+        smrydata[n].insert(smrydata[n].end(), new_vect_chunk.begin(), new_vect_chunk.end());
+
+    if (Opm::EclIO::fileExists(fileName))
+        remove (fileName.c_str());
+
+    hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5Pset_libver_bounds(fapl_id, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST);
+
+    file_id = H5Fcreate(fileName.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
+
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "VERSION", version );
+    Opm::Hdf5IO::write_1d_hdf5<int>(file_id, "RSTEP",  rstep);
+    Opm::Hdf5IO::write_2d_hdf5<float>(file_id, "SMRYDATA", smrydata);
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "START_DATE", startd );
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "KEYS", keys );
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "UNITS", units );
+
+    herr_t testswmr = H5Fstart_swmr_write(file_id);
+
+    if (testswmr < 0){
+        std::cout << "swmr did not work !" << std::endl;
+        exit(1);
+    }
+
+    auto lap1 = std::chrono::system_clock::now();
+
+    std::chrono::duration<double> elapsed_rewrite = lap1-lap0;
+
+    std::cout << " + " << std::setw(8) << std::setprecision(5) << std::fixed << elapsed_rewrite.count();
+    std::cout << "\n" << std::endl << std::flush;
+}
+
+
 
 /*
     std::cout << "H5_VERS_MAJOR     :  " << H5_VERS_MAJOR << std::endl;
@@ -177,6 +214,13 @@ int main(int argc, char **argv) {
     std::vector<std::vector<float>> tsData;
 
     std::vector<std::string> keywords = smry1.keywordList();
+
+    int time_ind = -1;
+
+    {
+        auto it = std::find(keywords.begin(), keywords.end(), "TIME");
+        time_ind = std::distance(keywords.begin(), it);
+    }
 
     std::vector<std::string> units;
     units.reserve(keywords.size());
@@ -240,7 +284,8 @@ int main(int argc, char **argv) {
 
     hid_t file_id = H5Fcreate(h5FileName.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
 
-    size_t maxTstep = 5000;
+    size_t maxTstep = 500;
+    //size_t maxTstep = 5;
 
     init_h5_file(file_id, name, keywords, units, startd, maxTstep);
 
@@ -267,33 +312,40 @@ int main(int argc, char **argv) {
     std::chrono::duration<double> elapsed_seconds3 = lap3-lap2;
     std::cout << "runtime opening and loading unsmry : " << elapsed_seconds1.count() << " seconds\n" << std::endl;
 
-    auto arrayList = unsmry_file.getList();
+    //auto arrayList = unsmry_file.getList();
 
     size_t tind = 0;
 
     double elapsed_writing = 0.0;
 
+    //size_t time_ind = 10455;
 
+    //for (size_t n = 0; n < 600; n++) {
     for (size_t n = 0; n < tsData.size(); n++) {
+    //for (size_t n = 0; n < maxTstep-100; n++) {
 
         std::vector<float> ts_vector = tsData[n];
+
+        if (n >= maxTstep) {
+
+            rewrie_h5_file(file_id, maxTstep, h5FileName, 2);
+
+            //std::cout << "\nneed to increase size, from " << maxTstep << std::flush;
+            //std::cout << " to: " << maxTstep*2 << "\n" << std::endl << std::flush;;
+
+            //Opm::Hdf5IO::expand_1d_dset<int>(file_id, "RSTEP", 2, -1);
+            //Opm::Hdf5IO::expand_2d_dset<float>(file_id, "SMRYDATA", 2, nanf(""));
+
+            //maxTstep = maxTstep * 2;
+        }
 
 
         std::cout << "adding step: " << std::setw(4) << tind+1;
         std::cout << "/ " << std::setw(4) << nTstep;
-        std::cout << "  time: " << std::setw(8) << std::setprecision(2) << std::fixed << ts_vector[0] << " .. " << std::flush;
+        std::cout << "  time: " << std::setw(8) << std::setprecision(2) << std::fixed << ts_vector[time_ind] << " .. " << std::flush;
 
         auto lap00 = std::chrono::system_clock::now();
 
-        if (n >= maxTstep) {
-            //std::cout << "\nneed to increase size, from " << maxTstep << std::flush;
-            //std::cout << " to: " << maxTstep*2 << "\n" << std::endl << std::flush;;
-
-            Opm::Hdf5IO::expand_1d_dset<int>(file_id, "RSTEP", 2, -1);
-            Opm::Hdf5IO::expand_2d_dset<float>(file_id, "SMRYDATA", 2, nanf(""));
-
-            maxTstep = maxTstep * 2;
-        }
 
         Opm::Hdf5IO::set_value_for_1d_hdf5<int>(file_id, "RSTEP", n, 1);
         Opm::Hdf5IO::set_value_for_2d_hdf5<float>(file_id, "SMRYDATA", n, ts_vector);
@@ -318,7 +370,10 @@ int main(int argc, char **argv) {
 
     H5Fclose(file_id);
 
-    std::cout << "\nFinished, all good \n\n";
+    auto lap4 = std::chrono::system_clock::now();
+    std::chrono::duration<double> final_elapsed_tot = lap4-lap3;
+
+    std::cout << "\nFinished, total elapsed: " << final_elapsed_tot.count() << "\n\n";
 
 
     return 0;

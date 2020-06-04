@@ -483,6 +483,7 @@ if(ENABLE_ECL_INPUT)
     examples/make_h5smry.cpp
     examples/make_h5smry_from_unsmry.cpp
     examples/make_h5smry_testing.cpp
+    examples/make_h5smry_testing2.cpp
     examples/test_lod_smry.cpp
   )
 endif()

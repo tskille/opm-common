@@ -62,6 +62,7 @@ void init_h5_file(hid_t file_id, std::string name, const std::vector<std::string
     std::vector<int> version = {0};
     Opm::Hdf5IO::write_1d_hdf5(file_id, "VERSION", version );
 
+    // this must also be fixed with chunc size
     Opm::Hdf5IO::write_1d_hdf5<int>(file_id, "RSTEP",  {}, true);
 
     Opm::Hdf5IO::write_1d_hdf5(file_id, "START_DATE", startd );
@@ -76,9 +77,10 @@ void init_h5_file(hid_t file_id, std::string name, const std::vector<std::string
     smrydata.reserve(nVect);
 
     for (size_t n=0; n < nVect; n++)
-        smrydata.push_back({});
+        smrydata.push_back({1.1, 2.2, 3.3, 4.4, 5.5});
+    //    smrydata.push_back({});
 
-    Opm::Hdf5IO::write_2d_hdf5<float>(file_id, "SMRYDATA", smrydata, true);
+    Opm::Hdf5IO::write_2d_hdf5<float>(file_id, "SMRYDATA", smrydata, true, {5000, 500});
 }
 
 /*
@@ -114,6 +116,7 @@ int main(int argc, char **argv) {
     Opm::filesystem::path smspecFileName = inputFileName.parent_path() / inputFileName.stem();
 
     h5FileName = h5FileName += ".H5SMRY";
+    //h5FileName = h5FileName += ".h5";
     unsmryFileName = unsmryFileName += ".UNSMRY";
     smspecFileName = smspecFileName += ".SMSPEC";
 
@@ -197,6 +200,8 @@ int main(int argc, char **argv) {
 
     init_h5_file(file_id, name, keywords, units, startd);
 
+    //H5Fclose(file_id);
+    //exit(1);
 
     herr_t testswmr = H5Fstart_swmr_write(file_id);
 
@@ -238,38 +243,35 @@ int main(int argc, char **argv) {
 
     // That is, the --enable-threadsafe and --enable-parallel flags are mutually exclusive
 
+    size_t time_ind = 10455;
 
     for (size_t n = 0; n < tsData.size(); n++){
+    //for (size_t n = 0; n < 500; n++) {
 
         std::vector<float> ts_vector = tsData[n];
 
-        if (true){
+        std::cout << "adding step: " << std::setw(4) << tind+1;
+        std::cout << "/ " << std::setw(4) << nTstep;
+        std::cout << "  time: " << std::setw(8) << std::setprecision(2) << std::fixed << ts_vector[time_ind] << " .. " << std::flush;
 
-            //std::vector<float> ts_data = unsmry_file.get<float>(n);
+        auto lap00 = std::chrono::system_clock::now();
 
-            std::cout << "adding step: " << std::setw(4) << tind+1;
-            std::cout << "/ " << std::setw(4) << nTstep;
-            std::cout << "  time: " << std::setw(8) << std::setprecision(2) << std::fixed << ts_vector[0] << " .. " << std::flush;
+        // 1 for is report step, 0 = is not report step (only time step)
+        Opm::Hdf5IO::add_value_to_1d_hdf5(file_id, "RSTEP", rstep[n]);
+        Opm::Hdf5IO::add_1d_to_2d_hdf5(file_id, "SMRYDATA", ts_vector);
 
-            auto lap00 = std::chrono::system_clock::now();
+        auto lap01 = std::chrono::system_clock::now();
+        std::chrono::duration<double> elapsed_ts = lap01-lap00;
 
-            // 1 for is report step, 0 = is not report step (only time step)
-            Opm::Hdf5IO::add_value_to_1d_hdf5(file_id, "RSTEP", rstep[n]);
-            Opm::Hdf5IO::add_1d_to_2d_hdf5(file_id, "SMRYDATA", ts_vector);
+        elapsed_writing = elapsed_writing + static_cast<double>(elapsed_ts.count());
 
-            auto lap01 = std::chrono::system_clock::now();
-            std::chrono::duration<double> elapsed_ts = lap01-lap00;
+        std::cout << " + " << std::setw(8) << std::setprecision(5) << std::fixed << elapsed_ts.count();
+        std::cout << " s,  total writing : " << elapsed_writing << " s" << std::endl << std::flush;
 
-            elapsed_writing = elapsed_writing + static_cast<double>(elapsed_ts.count());
+        tind++;
 
-            std::cout << " + " << std::setw(8) << std::setprecision(5) << std::fixed << elapsed_ts.count();
-            std::cout << " s,  total writing : " << elapsed_writing << " s" << std::endl << std::flush;
-
-            tind++;
-
-            //std::this_thread::sleep_for(std::chrono::microseconds(50000));
-            //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        }
+        //std::this_thread::sleep_for(std::chrono::microseconds(50000));
+        //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 
     H5Fclose(file_id);

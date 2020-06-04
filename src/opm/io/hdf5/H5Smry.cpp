@@ -105,8 +105,6 @@ H5Smry::H5Smry(const std::string &filename)
 
     auto rstep = Opm::Hdf5IO::get_1d_hdf5<int>(file_id, "RSTEP");
 
-    std::cout << "before: " << rstep.size() << std::endl;
-
     auto it = std::find(rstep.begin(), rstep.end(), -1);
 
     if (it != rstep.end()){

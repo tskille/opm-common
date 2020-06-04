@@ -32,7 +32,7 @@ namespace Opm {   namespace Hdf5IO {
     void add_value_1d(hid_t dataset_id, hid_t datatype_id, T value);
 
     void  write_array_2d(hid_t file_id, const char* data_set_name, hid_t datatype_id,
-                           const void * data, size_t nx, size_t ny, bool unlimited2);
+                           const void * data, size_t nx, size_t ny, bool unlimited2, hsize_t chunk_dims[2]);
 
     template <typename T>
     T* make_data_array(const std::vector<std::vector<T>>& dataVect, size_t& nx, size_t& ny);
@@ -93,24 +93,7 @@ std::string Opm::Hdf5IO::read_str_variable(hid_t file_id, const std::string& dat
 
     return resStr;
 }
-/*
-template <typename T>
-void Opm::Hdf5IO::increase_size_dset(hid_t file_id, const std::string& data_set_name, size_t increase_factor)
-{
-    std::vector<T> data = Opm::Hdf5IO::get_1d_hdf5<T>(file_id, data_set_name);
-    std::vector<T> new_chunk;
 
-    size_t new_size = data.size() * increase_factor;
-    new_chunk.resize(new_size - data.size(), -1);
-
-    data.insert(data.end(), new_chunk.begin(), new_chunk.end());
-
-    H5Ldelete(file_id, data_set_name.c_str(), H5P_DEFAULT );
-
-    Opm::Hdf5IO::write_1d_hdf5<T>(file_id,data_set_name.c_str(),data);
-}
-
-*/
 
 template <typename T>
 void Opm::Hdf5IO::set_value_1d(hid_t dataset_id, hid_t datatype_id, hid_t filespace_id, const char* data_set_name, size_t pos, T value)
@@ -167,7 +150,10 @@ void  Opm::Hdf5IO::write_array_1d(hid_t file_id, const char* data_set_name, hid_
     if (unlimited){
         dims[0] = size;
 
-        hsize_t chunk_dims[1] = {1};
+        // default chunk_cache for one data set is 1 Mb, corresponds to 125000 elements of 8 byte
+        // using chunk size of 120000;
+
+        hsize_t chunk_dims[1] = { 120000 };
         hsize_t maxdims[1] = {H5S_UNLIMITED};
 
         dataspace_id = H5Screate_simple (1, dims, maxdims);
@@ -397,30 +383,6 @@ void Opm::Hdf5IO::add_1d_to_2d_hdf5(hid_t file_id, const std::string& data_set_n
 }
 
 
-/*
-template <typename T>
-void Opm::Hdf5IO::set_value_1d(hid_t dataset_id, hid_t datatype_id, hid_t filespace_id, const char* data_set_name, size_t pos, T value)
-{
-    hsize_t   dims[1];
-
-    dims[0] = 1;
-
-    hsize_t   offset[1];
-    offset[0] = pos;
-
-    H5Sselect_hyperslab (filespace_id, H5S_SELECT_SET, offset, NULL, dims, NULL);
-
-    // Define memory space
-    hid_t memspace = H5Screate_simple (1, dims, NULL);
-
-    T data[1]  {value};
-
-    H5Dwrite (dataset_id, datatype_id, memspace, filespace_id, H5P_DEFAULT, data );
-    H5Dflush (dataset_id);
-
-    H5Sclose(memspace);
-}
-*/
 
 
 template <>
@@ -466,28 +428,42 @@ void Opm::Hdf5IO::set_value_for_2d_hdf5(hid_t file_id, const std::string& data_s
 
 
 void  Opm::Hdf5IO::write_array_2d(hid_t file_id, const char* data_set_name, hid_t datatype_id,
-                                  const void * data, size_t nx, size_t ny, bool unlimited2)
+                                  const void * data, size_t nx, size_t ny, bool unlimited2, hsize_t chunk_dims[2])
 {
     hid_t dataset_id, dataspace_id;
 
     hsize_t  dims[2] {nx, ny};
 
+    if ((chunk_dims[0] > 0) && (chunk_dims[1] == 0) ||  (chunk_dims[1] > 0) && (chunk_dims[0] == 0))
+        throw std::invalid_argument("invalied chunk size, both elements should be > 0");
+
+    if ((unlimited2) && ((chunk_dims[0] == 0) || (chunk_dims[1] == 0)))
+        throw std::invalid_argument("chunk size must be set when using H5S_UNLIMITED");
+
     if (unlimited2) {
-
-        hsize_t chunk_dims[2] = {nx, 1};
         hsize_t maxdims[2] = {nx, H5S_UNLIMITED};
-
         dataspace_id = H5Screate_simple (2, dims, maxdims);
+    } else {
+        dataspace_id = H5Screate_simple (2, dims, NULL);
+    }
 
+    if (chunk_dims[0] > 0)
+    {
         hid_t prop = H5Pcreate (H5P_DATASET_CREATE);
         H5Pset_chunk (prop, 2, chunk_dims);
 
+        size_t elements = chunk_dims[0]* chunk_dims[1];
+
+        size_t nbytes = elements * 4;
+        nbytes = static_cast<size_t>((float)nbytes * 1.2);
+
+        hid_t dapl_id = H5Pcreate (H5P_DATASET_ACCESS);
+        H5Pset_chunk_cache( dapl_id, elements, nbytes, H5D_CHUNK_CACHE_W0_DEFAULT );
+
         dataset_id = H5Dcreate2 (file_id, data_set_name, datatype_id, dataspace_id,
-                         H5P_DEFAULT, prop, H5P_DEFAULT);
+                         H5P_DEFAULT, prop, dapl_id);
 
     } else {
-
-        dataspace_id = H5Screate_simple(2, dims, NULL);
 
         dataset_id = H5Dcreate2(file_id, data_set_name, datatype_id, dataspace_id,
                                 H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
@@ -526,49 +502,59 @@ T* Opm::Hdf5IO::make_data_array(const std::vector<std::vector<T>>& dataVect, siz
 
 template <>
 void Opm::Hdf5IO::write_2d_hdf5(hid_t file_id, const std::string& data_set_name,
-                                const std::vector<std::vector<float>>& dataVect, bool unlimited2)
+                                const std::vector<std::vector<float>>& dataVect,
+                                const bool unlimited2, std::array<int, 2> chunk_size)
 {
     size_t nx = 0; size_t ny = 0;
 
     float * data = Opm::Hdf5IO::make_data_array(dataVect, nx, ny);
 
+    hsize_t chunk_dims[2] = {chunk_size[0], chunk_size[1]};
+
     Opm::Hdf5IO::write_array_2d(file_id, data_set_name.c_str(), H5T_NATIVE_FLOAT,
-                                  data, nx, ny, unlimited2);
+                                  data, nx, ny, unlimited2, chunk_dims);
 
     delete[] data;
 }
 
 template <>
 void Opm::Hdf5IO::write_2d_hdf5(hid_t file_id, const std::string& data_set_name,
-                                const std::vector<std::vector<double>>& dataVect, bool unlimited2)
+                                const std::vector<std::vector<double>>& dataVect,
+                                const bool unlimited2, std::array<int, 2> chunk_size)
 {
     size_t nx = 0; size_t ny = 0;
 
     double * data = Opm::Hdf5IO::make_data_array(dataVect, nx, ny);
 
+    hsize_t chunk_dims[2] = {chunk_size[0], chunk_size[1]};
+
     Opm::Hdf5IO::write_array_2d(file_id, data_set_name.c_str(), H5T_NATIVE_DOUBLE,
-                                  data, nx, ny, unlimited2);
+                                  data, nx, ny, unlimited2, chunk_dims);
 
     delete[] data;
 }
 
 template <>
 void Opm::Hdf5IO::write_2d_hdf5(hid_t file_id, const std::string& data_set_name,
-                                const std::vector<std::vector<int>>& dataVect, bool unlimited2)
+                                const std::vector<std::vector<int>>& dataVect,
+                                const bool unlimited2, std::array<int, 2> chunk_size)
 {
     size_t nx = 0; size_t ny = 0;
 
     int * data = Opm::Hdf5IO::make_data_array(dataVect, nx, ny);
 
+    hsize_t chunk_dims[2] = {chunk_size[0], chunk_size[1]};
+
     Opm::Hdf5IO::write_array_2d(file_id, data_set_name.c_str(), H5T_NATIVE_INT,
-                                  data, nx, ny, unlimited2);
+                                  data, nx, ny, unlimited2, chunk_dims);
 
     delete[] data;
 }
 
 template <>
 void Opm::Hdf5IO::write_2d_hdf5(hid_t file_id, const std::string& data_set_name,
-                                const std::vector<std::vector<std::string>>& dataVect, bool unlimited2)
+                                const std::vector<std::vector<std::string>>& dataVect,
+                                const bool unlimited2, std::array<int, 2> chunk_size)
 {
     size_t  nx = dataVect.size();
     hid_t datatype_id;
@@ -588,8 +574,10 @@ void Opm::Hdf5IO::write_2d_hdf5(hid_t file_id, const std::string& data_set_name,
     datatype_id = H5Tcopy (H5T_C_S1);
     H5Tset_size (datatype_id, H5T_VARIABLE);
 
+    hsize_t chunk_dims[2] = {chunk_size[0], chunk_size[1]};
+
     Opm::Hdf5IO::write_array_2d(file_id, data_set_name.c_str(), datatype_id,
-                                  data.data(), nx, ny, unlimited2);
+                                  data.data(), nx, ny, unlimited2, chunk_dims);
 }
 
 
