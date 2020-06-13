@@ -25,6 +25,7 @@
 #include <sstream>
 
 #include <opm/io/eclipse/ESmry.hpp>
+#include <opm/io/hdf5/H5Smry.hpp>
 
 
 static void printHelp() {
@@ -60,11 +61,53 @@ std::string formatString(float data){
     return stream.str();
 }
 
+std::vector<std::string> make_smry_key_list(char **argv, int argc, int argOffset, std::unique_ptr<Opm::Hdf5IO::H5Smry>& h5smry)
+{
+    std::vector<std::string> smryList;
+
+    for (int i=0; i<argc - argOffset-1; i++) {
+        if (h5smry->hasKey(argv[i+argOffset+1])) {
+            smryList.push_back(argv[i+argOffset+1]);
+        } else {
+            auto list = h5smry->keywordList(argv[i+argOffset+1]);
+
+            for (auto vect : list)
+                smryList.push_back(vect);
+        }
+    }
+
+    return smryList;
+}
+
+std::vector<std::string> make_smry_key_list(char **argv, int argc, int argOffset, std::unique_ptr<Opm::EclIO::ESmry>& esmry)
+{
+    std::vector<std::string> smryList;
+
+    for (int i=0; i<argc - argOffset-1; i++) {
+        if (esmry->hasKey(argv[i+argOffset+1])) {
+            smryList.push_back(argv[i+argOffset+1]);
+        } else {
+            auto list = esmry->keywordList(argv[i+argOffset+1]);
+
+            for (auto vect : list)
+                smryList.push_back(vect);
+        }
+    }
+
+    return smryList;
+}
+
+
+
 int main(int argc, char **argv) {
 
     int c                          = 0;
     bool reportStepsOnly           = false;
     bool listKeys                  = false;
+    bool use_h5smry                = false;
+
+    std::unique_ptr<Opm::EclIO::ESmry> esmry;
+    std::unique_ptr<Opm::Hdf5IO::H5Smry> h5smry;
 
     while ((c = getopt(argc, argv, "hrl")) != -1) {
         switch (c) {
@@ -84,11 +127,24 @@ int main(int argc, char **argv) {
 
     int argOffset = optind;
 
-    std::string filename = argv[argOffset];
-    Opm::EclIO::ESmry smryFile(filename);
+    Opm::filesystem::path inputFileName = argv[argOffset];
+
+    if (inputFileName.extension()==".H5SMRY")
+        use_h5smry = true;
+
+    if (use_h5smry)
+        h5smry = std::make_unique<Opm::Hdf5IO::H5Smry>(inputFileName);
+    else
+        esmry = std::make_unique<Opm::EclIO::ESmry>(inputFileName);
+
 
     if (listKeys){
-        auto list = smryFile.keywordList();
+        std::vector<std::string> list;
+
+        if (use_h5smry)
+            list = h5smry->keywordList();
+        else
+            list = esmry->keywordList();
 
         for (size_t n = 0; n < list.size(); n++){
             std::cout << std::setw(20) << list[n];
@@ -104,22 +160,12 @@ int main(int argc, char **argv) {
     }
 
     std::vector<std::string> smryList;
-    for (int i=0; i<argc - argOffset-1; i++) {
-        if (smryFile.hasKey(argv[i+argOffset+1])) {
-            smryList.push_back(argv[i+argOffset+1]);
-        } else {
-            auto list = smryFile.keywordList(argv[i+argOffset+1]);
 
-            if (list.size()==0) {
-                std::string message = "Key " + std::string(argv[i+argOffset+1]) + " not found in summary file " + filename;
-                std::cout << "\n!Runtime Error \n >> " << message << "\n\n";
-                return EXIT_FAILURE;
-            }
+    if (use_h5smry)
+        smryList = make_smry_key_list(argv, argc, argOffset, h5smry);
+    else
+        smryList = make_smry_key_list(argv, argc, argOffset, esmry);
 
-            for (auto vect : list)
-                smryList.push_back(vect);
-        }
-    }
 
     if (smryList.size()==0){
         std::string message = "No summary keys specified on command line";
@@ -130,7 +176,13 @@ int main(int argc, char **argv) {
     std::vector<std::vector<float>> smryData;
 
     for (auto key : smryList) {
-        std::vector<float> vect = reportStepsOnly ? smryFile.get_at_rstep(key) : smryFile.get(key);
+        std::vector<float> vect;
+
+        if (use_h5smry)
+            vect = reportStepsOnly ? h5smry->get_at_rstep(key) : h5smry->get(key);
+        else
+            vect = reportStepsOnly ? esmry->get_at_rstep(key) : esmry->get(key);
+
         smryData.push_back(vect);
     }
 

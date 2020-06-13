@@ -42,6 +42,9 @@
 #include <opm/io/eclipse/EclOutput.hpp>
 #include <opm/io/eclipse/OutputStream.hpp>
 
+#include <opm/io/eclipse/ESmry.hpp>
+#include <opm/io/hdf5/Hdf5Util.hpp>
+
 #include <opm/output/data/Wells.hpp>
 #include <opm/output/data/Groups.hpp>
 #include <opm/output/eclipse/RegionCache.hpp>
@@ -65,6 +68,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <iomanip>
 
 namespace {
     struct ParamCTorArgs
@@ -2094,6 +2098,7 @@ public:
                        std::string unit,
                        EvalPtr     evaluator)
     {
+
         this->smspec_.add(std::move(keyword), std::move(name),
                           std::max (num, 0), std::move(unit));
 
@@ -2110,9 +2115,16 @@ public:
         return this->evaluators_;
     }
 
+    const std::vector<std::string>& getKeyList() const
+    {
+        return this->keyList_;
+    }
+
+
 private:
     SMSpecPrm smspec_{};
     std::vector<EvalPtr> evaluators_{};
+    std::vector<std::string> keyList_;
 };
 
 class SMSpecStreamDeferredCreation
@@ -2273,8 +2285,29 @@ private:
     std::vector<std::string> valueKeys_{};
     std::vector<MiniStep>    unwritten_{};
 
+    std::vector<std::string> smryVectorKeys_{};
+    std::vector<std::string> smryVectorUnits_{};
+
+    // try to come up with estimate of max number of timesteps
+    // based on simulation schedule (number of days)
+    // !! check  reportStepTimesInDays and number of days
+    //
+
+    size_t hdf5MaxTSteps{50};
+    hid_t hfsmry_file_id;
+    std::string h5smryFileName;
+
+    time_t StartTime;
+
+    std::vector<float> reportStepTimesInDays;
+
+    double elapsed_h5smry{0.0};
+    double elapsed_eclsmry{0.0};
+
     std::unique_ptr<Opm::EclIO::OutputStream::SummarySpecification> smspec_{};
     std::unique_ptr<Opm::EclIO::EclOutput> stream_{};
+
+    void configureReportStepTimesInDays(const Schedule&  sched);
 
     void configureTimeVectors(const EclipseState& es, const SummaryConfig& sumcfg);
 
@@ -2293,6 +2326,10 @@ private:
 
     void createSMSpecIfNecessary();
     void createSmryStreamIfNecessary(const int report_step);
+
+    void createH5smryIfNecessary(std::vector<MiniStep> ministeps);
+    void updateH5smry(const MiniStep& ms);
+    void rewrite_h5smry(size_t incFactor);
 };
 
 Opm::out::Summary::SummaryImplementation::
@@ -2308,9 +2345,13 @@ SummaryImplementation(const EclipseState&  es,
     , fmt_           { es.cfg().io().getFMTOUT() }
     , unif_          { es.cfg().io().getUNIFOUT() }
 {
+    this->configureReportStepTimesInDays(sched);
     this->configureTimeVectors(es, sumcfg);
     this->configureSummaryInput(es, sumcfg, grid, sched);
     this->configureRequiredRestartParameters(sumcfg, sched);
+
+    h5smryFileName = es.cfg().io().getOutputDir() + "/" + es.cfg().io().getBaseName() + ".H5SMRY";
+    StartTime = sched.getStartTime();
 }
 
 void Opm::out::Summary::SummaryImplementation::
@@ -2367,7 +2408,13 @@ void Opm::out::Summary::SummaryImplementation::write()
         // No unwritten data.  Nothing to do so return early.
         return;
 
+    this->createH5smryIfNecessary(this->unwritten_);
+
     this->createSMSpecIfNecessary();
+
+    if (hfsmry_file_id == -1){
+        std::cout << "must create an initial h5smry file " << std::endl;
+    }
 
     if (this->prevReportStepID_ < this->lastUnwritten().seq) {
         this->smspec_->write(this->outputParameters_.summarySpecification());
@@ -2384,8 +2431,80 @@ void Opm::out::Summary::SummaryImplementation::write()
     this->numUnwritten_ = zero;
 }
 
+void Opm::out::Summary::SummaryImplementation::rewrite_h5smry(size_t incFactor)
+{
+    H5Fclose(hfsmry_file_id);
+
+    hfsmry_file_id = H5Fopen( h5smryFileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+
+    auto startd = Opm::Hdf5IO::get_1d_hdf5<int>(hfsmry_file_id, "START_DATE");
+    auto version = Opm::Hdf5IO::get_1d_hdf5<int>(hfsmry_file_id, "VERSION");
+    auto keys = Opm::Hdf5IO::get_1d_hdf5<std::string>(hfsmry_file_id, "KEYS");
+    auto units = Opm::Hdf5IO::get_1d_hdf5<std::string>(hfsmry_file_id, "UNITS");
+    auto rstep = Opm::Hdf5IO::get_1d_hdf5<int>(hfsmry_file_id, "RSTEP");
+    auto smrydata = Opm::Hdf5IO::get_2d_hdf5<float>(hfsmry_file_id, "SMRYDATA");
+
+    H5Fclose(hfsmry_file_id);
+
+    size_t nTstep = hdf5MaxTSteps;
+
+    std::vector<int> new_chunk;
+    hdf5MaxTSteps = nTstep * incFactor;
+
+    new_chunk.resize(hdf5MaxTSteps - nTstep, -1);
+    rstep.insert(rstep.end(), new_chunk.begin(), new_chunk.end());
+
+    std::vector<float> new_vect_chunk;
+    new_vect_chunk.resize(hdf5MaxTSteps - nTstep, nanf(""));
+
+    for (size_t n=0; n < smrydata.size(); n++)
+        smrydata[n].insert(smrydata[n].end(), new_vect_chunk.begin(), new_vect_chunk.end());
+
+    remove (h5smryFileName.c_str());
+
+    hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5Pset_libver_bounds(fapl_id, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST);
+
+    hfsmry_file_id = H5Fcreate(h5smryFileName.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
+
+    Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "VERSION", version );
+    Opm::Hdf5IO::write_1d_hdf5<int>(hfsmry_file_id, "RSTEP",  rstep);
+    Opm::Hdf5IO::write_2d_hdf5<float>(hfsmry_file_id, "SMRYDATA", smrydata);
+    Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "START_DATE", startd );
+    Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "KEYS", keys );
+    Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "UNITS", units );
+
+
+    if (H5Fstart_swmr_write(hfsmry_file_id) < 0)
+        throw std::runtime_error("Error starting swmr for hdf5 file h5smry");
+}
+
+
+void Opm::out::Summary::SummaryImplementation::updateH5smry(const MiniStep& ms)
+{
+
+    if (ms.id >= hdf5MaxTSteps)
+        this->rewrite_h5smry(2);
+
+    if  (reportStepTimesInDays[ms.seq] == ms.params[0])
+        Opm::Hdf5IO::set_value_for_1d_hdf5<int>(hfsmry_file_id, "RSTEP", ms.id, 1);
+    else
+        Opm::Hdf5IO::set_value_for_1d_hdf5<int>(hfsmry_file_id, "RSTEP", ms.id, 0);
+
+    Opm::Hdf5IO::set_value_for_2d_hdf5<float>(hfsmry_file_id, "SMRYDATA", ms.id, ms.params);
+}
+
 void Opm::out::Summary::SummaryImplementation::write(const MiniStep& ms)
 {
+    auto start_write_hdf5 = std::chrono::system_clock::now();
+    this->updateH5smry(ms);
+    auto end_write_hdf5 = std::chrono::system_clock::now();
+
+    std::chrono::duration<double> elapsed_ts_h5 = end_write_hdf5-start_write_hdf5;
+    elapsed_h5smry = elapsed_h5smry + static_cast<double>(elapsed_ts_h5.count());
+
+    auto start_write_stdecl = std::chrono::system_clock::now();
+
     this->createSmryStreamIfNecessary(ms.seq);
 
     if (this->prevReportStepID_ < ms.seq) {
@@ -2397,7 +2516,36 @@ void Opm::out::Summary::SummaryImplementation::write(const MiniStep& ms)
 
     this->stream_->write("MINISTEP", std::vector<int>{ ms.id });
     this->stream_->write("PARAMS"  , ms.params);
+
+    auto end_write_stdecl = std::chrono::system_clock::now();
+
+    std::chrono::duration<double> elapsed_ts_ecl = end_write_stdecl - start_write_stdecl;
+    elapsed_eclsmry = elapsed_eclsmry + static_cast<double>(elapsed_ts_ecl.count());
+
+    std::cout << " >> runtime writing eclsmry:  ";
+    std::cout << " + " << std::setw(8) << std::setprecision(5) << std::fixed << elapsed_ts_ecl.count();
+    std::cout << " s,  total writing : " << elapsed_eclsmry << " s" << std::endl << std::flush;
+
+
+    std::cout << " >> runtime writing h5smry :  ";
+    std::cout << " + " << std::setw(8) << std::setprecision(5) << std::fixed << elapsed_ts_h5.count();
+    std::cout << " s,  total writing : " << elapsed_h5smry << " s" << std::endl << std::flush;
 }
+
+void
+Opm::out::Summary::SummaryImplementation::
+configureReportStepTimesInDays(const Schedule&  sched)
+{
+    reportStepTimesInDays = {0.0};
+
+    auto tm =sched.getTimeMap();
+    auto timeL = tm.timeList();
+
+    for (size_t n = 1; n < timeL.size(); n ++)
+        reportStepTimesInDays.push_back(static_cast<float>(timeL[n]-timeL[0])/(3600.0*24.0));
+}
+
+
 
 void
 Opm::out::Summary::SummaryImplementation::
@@ -2405,6 +2553,7 @@ configureTimeVectors(const EclipseState& es, const SummaryConfig& sumcfg)
 {
     const auto dfltwgname = std::string(":+:+:+:+");
     const auto dfltnum    = 0;
+
 
     // XXX: Save keys might need/want to include a random component too.
     auto makeKey = [this](const std::string& keyword) -> void
@@ -2422,8 +2571,12 @@ configureTimeVectors(const EclipseState& es, const SummaryConfig& sumcfg)
         const std::string& unit_string = es.getUnits().name(UnitSystem::measure::time);
         auto eval = std::make_unique<Evaluator::Time>(this->valueKeys_.back());
 
+
         this->outputParameters_
             .makeParameter(kw, dfltwgname, dfltnum, unit_string, std::move(eval));
+
+        this->smryVectorKeys_.push_back("TIME");
+        this->smryVectorUnits_.push_back(unit_string);
     }
 
     if (sumcfg.hasKeyword("DAY")) {
@@ -2431,6 +2584,10 @@ configureTimeVectors(const EclipseState& es, const SummaryConfig& sumcfg)
         makeKey(kw);
 
         auto eval = std::make_unique<Evaluator::Day>(this->valueKeys_.back());
+
+        this->smryVectorKeys_.push_back("DAY");
+        this->smryVectorUnits_.push_back("");
+
         this->outputParameters_
             .makeParameter(kw, dfltwgname, dfltnum, "", std::move(eval));
     }
@@ -2440,6 +2597,10 @@ configureTimeVectors(const EclipseState& es, const SummaryConfig& sumcfg)
         makeKey(kw);
 
         auto eval = std::make_unique<Evaluator::Month>(this->valueKeys_.back());
+
+        this->smryVectorKeys_.push_back("MONTH");
+        this->smryVectorUnits_.push_back("");
+
         this->outputParameters_
             .makeParameter(kw, dfltwgname, dfltnum, "", std::move(eval));
     }
@@ -2449,6 +2610,10 @@ configureTimeVectors(const EclipseState& es, const SummaryConfig& sumcfg)
         makeKey(kw);
 
         auto eval = std::make_unique<Evaluator::Year>(this->valueKeys_.back());
+
+        this->smryVectorKeys_.push_back("YEAR");
+        this->smryVectorUnits_.push_back("");
+
         this->outputParameters_
             .makeParameter(kw, dfltwgname, dfltnum, "", std::move(eval));
     }
@@ -2459,6 +2624,9 @@ configureTimeVectors(const EclipseState& es, const SummaryConfig& sumcfg)
         makeKey(kw);
 
         auto eval = std::make_unique<Evaluator::Years>(this->valueKeys_.back());
+
+        this->smryVectorKeys_.push_back("YEAR");
+        this->smryVectorUnits_.push_back("");
 
         this->outputParameters_
             .makeParameter(kw, dfltwgname, dfltnum, kw, std::move(eval));
@@ -2472,6 +2640,7 @@ configureSummaryInput(const EclipseState&  es,
                       const EclipseGrid&   grid,
                       const Schedule&      sched)
 {
+
     const auto st = SummaryState {
         std::chrono::system_clock::from_time_t(sched.getStartTime())
     };
@@ -2479,6 +2648,8 @@ configureSummaryInput(const EclipseState&  es,
     Evaluator::Factory fact {
         es, grid, st, sched.getUDQConfig(sched.size() - 1)
     };
+
+    std::array<int, 3> nIJK = grid.getNXYZ();
 
     auto unsuppkw = std::vector<SummaryConfigNode>{};
     for (const auto& node : sumcfg) {
@@ -2493,6 +2664,15 @@ configureSummaryInput(const EclipseState&  es,
         // This keyword has a known evaluation method.
 
         this->valueKeys_.push_back(std::move(prmDescr.uniquekey));
+
+        //std::string keyString = Opm::EclIO::makeKeyString(node.keyword(), node.namedEntity(), node.number(),
+        //                                                            nIJK[0], nIJK[1]);
+        //this->smryVectorKeys_.push_back(keyString);
+
+        this->smryVectorKeys_.push_back( Opm::EclIO::makeKeyString(node.keyword(), node.namedEntity(), node.number(),
+                                         nIJK[0], nIJK[1]));
+
+        this->smryVectorUnits_.push_back(prmDescr.unit);
 
         this->outputParameters_
             .makeParameter(node.keyword(),
@@ -2562,6 +2742,48 @@ Opm::out::Summary::SummaryImplementation::lastUnwritten() const
     assert (this->numUnwritten_ >  decltype(this->numUnwritten_){0});
 
     return this->unwritten_[this->numUnwritten_ - 1];
+}
+
+void Opm::out::Summary::SummaryImplementation::createH5smryIfNecessary(std::vector<MiniStep> ministeps)
+{
+
+    if (ministeps.size() > 0)
+        if (ministeps[0].id == 0){
+            hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+            H5Pset_libver_bounds(fapl_id, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST);
+            hfsmry_file_id = H5Fcreate(h5smryFileName.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
+
+            Opm::Hdf5IO::write_1d_hdf5<int>(hfsmry_file_id, "VERSION", {0} );
+
+            const auto tm = *std::gmtime(&StartTime);
+
+            std::vector<int> startd = { tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900,
+                tm.tm_hour,  tm.tm_min, tm.tm_sec, 0};
+
+            Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "START_DATE", startd );
+
+            std::vector<int> rstepVect;
+            rstepVect.resize(hdf5MaxTSteps, -1);
+
+            Opm::Hdf5IO::write_1d_hdf5<int>(hfsmry_file_id, "RSTEP",  rstepVect);
+            Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "KEYS", this->smryVectorKeys_ );
+            Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "UNITS", this->smryVectorUnits_ );
+
+            std::vector<std::vector<float>> smrydata;
+            smrydata.reserve(this->smryVectorKeys_.size());
+
+            for (size_t n=0; n < this->smryVectorKeys_.size(); n++){
+                std::vector<float> emptyVect;
+                emptyVect.resize(hdf5MaxTSteps, nanf(""));
+                smrydata.push_back(emptyVect);
+            }
+
+            Opm::Hdf5IO::write_2d_hdf5<float>(hfsmry_file_id, "SMRYDATA", smrydata);
+
+            if ( H5Fstart_swmr_write(hfsmry_file_id) < 0)
+                throw std::runtime_error("Error when starting single write multiple read for hdf5");
+        }
+
 }
 
 void Opm::out::Summary::SummaryImplementation::createSMSpecIfNecessary()

@@ -22,6 +22,7 @@
 #include <opm/io/eclipse/EclFile.hpp>
 #include <opm/io/eclipse/EclUtil.hpp>
 #include <opm/io/eclipse/EclOutput.hpp>
+#include <opm/io/hdf5/Hdf5Util.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -82,8 +83,84 @@ std::chrono::system_clock::time_point make_date(const std::vector<int>& datetime
 
 }
 
+namespace Opm { namespace EclIO {
+
+
+void ijk_from_global_index(int glob,int &i,int &j,int &k, int nI, int nJ)
+{
+    const int tmpGlob = glob - 1;
+
+    k = 1 + tmpGlob / (nI * nJ);
+    const int rest = tmpGlob % (nI * nJ);
+
+    j = 1 + rest / nI;
+    i = 1 + rest % nI;
+}
+
+
+
+const std::string makeKeyString(const std::string& keywordArg, const std::string& wgname, int num, int nI, int nJ)
+{
+    std::string keyStr;
+    const std::vector<std::string> segmExcep= {"STEPTYPE", "SEPARATE", "SUMTHIN"};
+
+    if (keywordArg.substr(0, 1) == "A") {
+        keyStr = keywordArg + ":" + std::to_string(num);
+    } else if (keywordArg.substr(0, 1) == "B") {
+        int _i,_j,_k;
+        ijk_from_global_index(num, _i, _j, _k, nI, nJ);
+
+        keyStr = keywordArg + ":" + std::to_string(_i) + "," + std::to_string(_j) + "," + std::to_string(_k);
+
+    } else if (keywordArg.substr(0, 1) == "C") {
+        if (num > 0) {
+            int _i,_j,_k;
+            ijk_from_global_index(num, _i, _j, _k, nI, nJ);
+            keyStr = keywordArg + ":" + wgname+ ":" + std::to_string(_i) + "," + std::to_string(_j) + "," + std::to_string(_k);
+        }
+    } else if (keywordArg.substr(0, 1) == "G") {
+        if ( wgname != ":+:+:+:+") {
+            keyStr = keywordArg + ":" + wgname;
+        }
+    } else if (keywordArg.substr(0, 1) == "R" && keywordArg.substr(2, 1) == "F") {
+        // NUMS = R1 + 32768*(R2 + 10)
+        int r2 = 0;
+        int y = 32768 * (r2 + 10) - num;
+
+        while (y <0 ) {
+            r2++;
+            y = 32768 * (r2 + 10) - num;
+        }
+
+        r2--;
+        const int r1 = num - 32768 * (r2 + 10);
+
+        keyStr = keywordArg + ":" + std::to_string(r1) + "-" + std::to_string(r2);
+    } else if (keywordArg.substr(0, 1) == "R") {
+        keyStr = keywordArg + ":" + std::to_string(num);
+    } else if (keywordArg.substr(0, 1) == "S") {
+        auto it = std::find(segmExcep.begin(), segmExcep.end(), keywordArg);
+        if (it != segmExcep.end()) {
+            keyStr = keywordArg;
+        } else {
+            keyStr = keywordArg + ":" + wgname + ":" + std::to_string(num);
+        }
+    } else if (keywordArg.substr(0,1) == "W") {
+        if (wgname != ":+:+:+:+") {
+            keyStr = keywordArg + ":" + wgname;
+        }
+    } else {
+        keyStr = keywordArg;
+    }
+
+    return keyStr;
+}
+
+
+}}
 
 namespace Opm { namespace EclIO {
+
 
 ESmry::ESmry(const std::string &filename, bool loadBaseRunData) :
     inputFileName { filename },
@@ -168,7 +245,11 @@ ESmry::ESmry(const std::string &filename, bool loadBaseRunData) :
         this->startdat = make_date(smspecList.back().get<int>("STARTDAT"));
 
         for (unsigned int i=0; i<keywords.size(); i++) {
-            const std::string keyString = makeKeyString(keywords[i], wgnames[i], nums[i]);
+
+            const std::string keyString = Opm::EclIO::makeKeyString(keywords[i], wgnames[i], nums[i],
+                                                                    this->nI, this->nJ);
+
+            //const std::string keyString = makeKeyString(keywords[i], wgnames[i], nums[i]);
             combindKeyList.push_back(keyString);
 
             if (keyString.length() > 0) {
@@ -232,7 +313,9 @@ ESmry::ESmry(const std::string &filename, bool loadBaseRunData) :
         this->startdat = make_date(smspecList.back().get<int>("STARTDAT"));
 
         for (size_t i = 0; i < keywords.size(); i++) {
-            const std::string keyString = makeKeyString(keywords[i], wgnames[i], nums[i]);
+            const std::string keyString = Opm::EclIO::makeKeyString(keywords[i], wgnames[i], nums[i],
+                this->nI, this->nJ);
+
             combindKeyList.push_back(keyString);
             if (keyString.length() > 0) {
                 summaryNodes.push_back({
@@ -287,7 +370,8 @@ ESmry::ESmry(const std::string &filename, bool loadBaseRunData) :
         const std::vector<int> nums = smspecList[specInd].get<int>("NUMS");
 
         for (size_t i=0; i < keywords.size(); i++) {
-            const std::string keyw = makeKeyString(keywords[i], wgnames[i], nums[i]);
+            const std::string keyw = Opm::EclIO::makeKeyString(keywords[i], wgnames[i], nums[i],
+                this->nI, this->nJ);
 
             if (keywList.find(keyw) != keywList.end())
                 arrayPos[specInd][keyIndex[keyw]]=i;
@@ -1031,6 +1115,61 @@ bool ESmry::make_lodsmry_file()
     }
 }
 
+bool ESmry::make_h5smry_file() const
+{
+    if (!fromSingleRun)
+        OPM_THROW(std::invalid_argument, "creating h5smry file only possible when loadBaseRunData=false");
+
+    Opm::filesystem::path path = inputFileName.parent_path();
+    Opm::filesystem::path rootName = inputFileName.stem();
+    Opm::filesystem::path smryDataFile;
+
+    smryDataFile = path / rootName += ".H5SMRY";
+
+    hid_t file_id = H5Fcreate(smryDataFile.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+
+    std::vector<int> version = {0};
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "VERSION", version );
+
+    Opm::TimeStampUTC ts( std::chrono::system_clock::to_time_t( startdat ));
+
+    std::vector<int> start_date_vect = {ts.day(), ts.month(), ts.year(),
+        ts.hour(), ts.minutes(), ts.seconds(), 0 };
+
+    Opm::Hdf5IO::write_1d_hdf5<int>(file_id, "START_DATE", start_date_vect );
+
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "KEYS", keyword );
+
+    std::vector<std::string> units;
+    units.reserve(keyword.size());
+
+    for (auto key: keyword) {
+        auto it = kwunits.find(key);
+        units.push_back(it->second);
+    }
+
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "UNITS", units );
+
+    std::vector<int> is_rstep;
+    is_rstep.reserve(timeStepList.size());
+
+    for (size_t i = 0; i < timeStepList.size(); i++)
+        if(std::find(seqIndex.begin(), seqIndex.end(), i) != seqIndex.end())
+            is_rstep.push_back(1);
+        else
+            is_rstep.push_back(0);
+
+    Opm::Hdf5IO::write_1d_hdf5(file_id, "RSTEP",  is_rstep );
+
+    this->LoadData();
+
+    Opm::Hdf5IO::write_2d_hdf5(file_id, "SMRYDATA",  vectorData );
+
+    H5Fclose(file_id);
+
+    return true;
+}
+
 
 std::vector<std::string> ESmry::checkForMultipleResultFiles(const Opm::filesystem::path& rootN, bool formatted) const {
 
@@ -1082,7 +1221,7 @@ bool ESmry::hasKey(const std::string &key) const
     return std::find(keyword.begin(), keyword.end(), key) != keyword.end();
 }
 
-
+/*
 void ESmry::ijk_from_global_index(int glob,int &i,int &j,int &k) const
 {
     const int tmpGlob = glob - 1;
@@ -1093,8 +1232,8 @@ void ESmry::ijk_from_global_index(int glob,int &i,int &j,int &k) const
     j = 1 + rest / nI;
     i = 1 + rest % nI;
 }
-
-
+*/
+/*
 std::string ESmry::makeKeyString(const std::string& keywordArg, const std::string& wgname, int num) const
 {
     std::string keyStr;
@@ -1151,12 +1290,13 @@ std::string ESmry::makeKeyString(const std::string& keywordArg, const std::strin
 
     return keyStr;
 }
+*/
 
 std::string ESmry::unpackNumber(const SummaryNode& node) const {
     if (node.category == SummaryNode::Category::Block ||
         node.category == SummaryNode::Category::Connection) {
         int _i,_j,_k;
-        ijk_from_global_index(node.number, _i, _j, _k);
+        ijk_from_global_index(node.number, _i, _j, _k, this->nI, this->nJ);
 
         return std::to_string(_i) + "," + std::to_string(_j) + "," + std::to_string(_k);
     } else if (node.category == SummaryNode::Category::Region && node.keyword[2] == 'F') {

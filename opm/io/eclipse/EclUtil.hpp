@@ -73,6 +73,8 @@ namespace Opm { namespace EclIO {
     std::vector<bool> readFormattedLogiArray(const std::string& file_str, const int64_t size, int64_t fromPos);
     std::vector<double> readFormattedDoubArray(const std::string& file_str, const int64_t size, int64_t fromPos);
 
+    //std::string makeKeyString(const std::string& keyword, const std::string& wgname, int num);
+
 }} // namespace Opm::EclIO
 
 #endif // OPM_IO_ECLUTIL_HPP

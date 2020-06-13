@@ -35,6 +35,10 @@ namespace Opm { namespace EclIO {
 using ArrSourceEntry = std::tuple<std::string, std::string, int, uint64_t>;
 using TimeStepEntry = std::tuple<int, int, uint64_t>;
 
+void ijk_from_global_index(int glob,int &i,int &j,int &k, int nI, int nJ);
+const std::string makeKeyString(const std::string& keywordArg, const std::string& wgname, int num, int nI, int nJ);
+
+
 class ESmry
 {
 public:
@@ -58,6 +62,7 @@ public:
     void LoadData() const;
 
     bool make_lodsmry_file();
+    bool make_h5smry_file() const;
 
     std::chrono::system_clock::time_point startdate() const { return startdat; }
 
@@ -74,6 +79,7 @@ public:
 
     void write_rsm(std::ostream&) const;
     void write_rsm_file(std::optional<Opm::filesystem::path> = std::nullopt) const;
+
 
 private:
     Opm::filesystem::path inputFileName, lodFileName;
@@ -96,7 +102,7 @@ private:
 
     std::vector<int> seqIndex;
 
-    void ijk_from_global_index(int glob, int &i, int &j, int &k) const;
+    //void ijk_from_global_index(int glob, int &i, int &j, int &k) const;
 
     std::vector<SummaryNode> summaryNodes;
     std::unordered_map<std::string, std::string> kwunits;
@@ -111,7 +117,7 @@ private:
 
     void updatePathAndRootName(Opm::filesystem::path& dir, Opm::filesystem::path& rootN) const;
 
-    std::string makeKeyString(const std::string& keyword, const std::string& wgname, int num) const;
+    //std::string makeKeyString(const std::string& keyword, const std::string& wgname, int num) const;
 
     std::string unpackNumber(const SummaryNode&) const;
     std::string lookupKey(const SummaryNode&) const;
