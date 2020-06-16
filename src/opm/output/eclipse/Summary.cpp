@@ -2293,7 +2293,7 @@ private:
     // !! check  reportStepTimesInDays and number of days
     //
 
-    size_t hdf5MaxTSteps{50};
+    size_t hdf5MaxTSteps{3000};
     hid_t hfsmry_file_id;
     std::string h5smryFileName;
 
@@ -2329,7 +2329,6 @@ private:
 
     void createH5smryIfNecessary(std::vector<MiniStep> ministeps);
     void updateH5smry(const MiniStep& ms);
-    void rewrite_h5smry(size_t incFactor);
 };
 
 Opm::out::Summary::SummaryImplementation::
@@ -2412,10 +2411,6 @@ void Opm::out::Summary::SummaryImplementation::write()
 
     this->createSMSpecIfNecessary();
 
-    if (hfsmry_file_id == -1){
-        std::cout << "must create an initial h5smry file " << std::endl;
-    }
-
     if (this->prevReportStepID_ < this->lastUnwritten().seq) {
         this->smspec_->write(this->outputParameters_.summarySpecification());
     }
@@ -2431,67 +2426,15 @@ void Opm::out::Summary::SummaryImplementation::write()
     this->numUnwritten_ = zero;
 }
 
-void Opm::out::Summary::SummaryImplementation::rewrite_h5smry(size_t incFactor)
-{
-    H5Fclose(hfsmry_file_id);
-
-    hfsmry_file_id = H5Fopen( h5smryFileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-
-    auto startd = Opm::Hdf5IO::get_1d_hdf5<int>(hfsmry_file_id, "START_DATE");
-    auto version = Opm::Hdf5IO::get_1d_hdf5<int>(hfsmry_file_id, "VERSION");
-    auto keys = Opm::Hdf5IO::get_1d_hdf5<std::string>(hfsmry_file_id, "KEYS");
-    auto units = Opm::Hdf5IO::get_1d_hdf5<std::string>(hfsmry_file_id, "UNITS");
-    auto rstep = Opm::Hdf5IO::get_1d_hdf5<int>(hfsmry_file_id, "RSTEP");
-    auto smrydata = Opm::Hdf5IO::get_2d_hdf5<float>(hfsmry_file_id, "SMRYDATA");
-
-    H5Fclose(hfsmry_file_id);
-
-    size_t nTstep = hdf5MaxTSteps;
-
-    std::vector<int> new_chunk;
-    hdf5MaxTSteps = nTstep * incFactor;
-
-    new_chunk.resize(hdf5MaxTSteps - nTstep, -1);
-    rstep.insert(rstep.end(), new_chunk.begin(), new_chunk.end());
-
-    std::vector<float> new_vect_chunk;
-    new_vect_chunk.resize(hdf5MaxTSteps - nTstep, nanf(""));
-
-    for (size_t n=0; n < smrydata.size(); n++)
-        smrydata[n].insert(smrydata[n].end(), new_vect_chunk.begin(), new_vect_chunk.end());
-
-    remove (h5smryFileName.c_str());
-
-    hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
-    H5Pset_libver_bounds(fapl_id, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST);
-
-    hfsmry_file_id = H5Fcreate(h5smryFileName.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
-
-    Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "VERSION", version );
-    Opm::Hdf5IO::write_1d_hdf5<int>(hfsmry_file_id, "RSTEP",  rstep);
-    Opm::Hdf5IO::write_2d_hdf5<float>(hfsmry_file_id, "SMRYDATA", smrydata);
-    Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "START_DATE", startd );
-    Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "KEYS", keys );
-    Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "UNITS", units );
-
-
-    if (H5Fstart_swmr_write(hfsmry_file_id) < 0)
-        throw std::runtime_error("Error starting swmr for hdf5 file h5smry");
-}
-
-
 void Opm::out::Summary::SummaryImplementation::updateH5smry(const MiniStep& ms)
 {
 
-    if (ms.id >= hdf5MaxTSteps)
-        this->rewrite_h5smry(2);
-
     if  (reportStepTimesInDays[ms.seq] == ms.params[0])
-        Opm::Hdf5IO::set_value_for_1d_hdf5<int>(hfsmry_file_id, "RSTEP", ms.id, 1);
+        Opm::Hdf5IO::add_value_to_1d_hdf5(hfsmry_file_id, "RSTEP", 1);
     else
-        Opm::Hdf5IO::set_value_for_1d_hdf5<int>(hfsmry_file_id, "RSTEP", ms.id, 0);
+        Opm::Hdf5IO::add_value_to_1d_hdf5(hfsmry_file_id, "RSTEP", 0);
 
-    Opm::Hdf5IO::set_value_for_2d_hdf5<float>(hfsmry_file_id, "SMRYDATA", ms.id, ms.params);
+    Opm::Hdf5IO::add_1d_to_2d_hdf5<float>(hfsmry_file_id, "SMRYDATA", ms.params);
 }
 
 void Opm::out::Summary::SummaryImplementation::write(const MiniStep& ms)
@@ -2762,23 +2705,21 @@ void Opm::out::Summary::SummaryImplementation::createH5smryIfNecessary(std::vect
 
             Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "START_DATE", startd );
 
-            std::vector<int> rstepVect;
-            rstepVect.resize(hdf5MaxTSteps, -1);
-
-            Opm::Hdf5IO::write_1d_hdf5<int>(hfsmry_file_id, "RSTEP",  rstepVect);
             Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "KEYS", this->smryVectorKeys_ );
             Opm::Hdf5IO::write_1d_hdf5(hfsmry_file_id, "UNITS", this->smryVectorUnits_ );
 
+            Opm::Hdf5IO::write_1d_hdf5<int>(hfsmry_file_id, "RSTEP",  {}, true);
+
             std::vector<std::vector<float>> smrydata;
-            smrydata.reserve(this->smryVectorKeys_.size());
+            smrydata.resize(this->smryVectorKeys_.size(), {});
 
-            for (size_t n=0; n < this->smryVectorKeys_.size(); n++){
-                std::vector<float> emptyVect;
-                emptyVect.resize(hdf5MaxTSteps, nanf(""));
-                smrydata.push_back(emptyVect);
-            }
+            size_t vect_chunk_size = 5000;
 
-            Opm::Hdf5IO::write_2d_hdf5<float>(hfsmry_file_id, "SMRYDATA", smrydata);
+            if (this->smryVectorKeys_.size() < 5000)
+                vect_chunk_size = this->smryVectorKeys_.size();
+
+            Opm::Hdf5IO::write_2d_hdf5<float>(hfsmry_file_id, "SMRYDATA", smrydata,
+                       true, {vect_chunk_size, this->hdf5MaxTSteps});
 
             if ( H5Fstart_swmr_write(hfsmry_file_id) < 0)
                 throw std::runtime_error("Error when starting single write multiple read for hdf5");
