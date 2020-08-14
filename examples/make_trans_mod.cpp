@@ -93,7 +93,9 @@ bool operator!= (const NNC &c1, const NNC &c2)
 }
 
 
-void write_keyword(const std::string fileName, const std::string name, const std::vector<float>& trans)
+void write_keyword(const std::string fileName, const std::string name,
+                   const std::vector<float>& trans,
+                   const Opm::EclIO::EGrid& egrid)
 {
     const int ncol = 5;
 
@@ -103,19 +105,36 @@ void write_keyword(const std::string fileName, const std::string name, const std
     tran_file << "-- file holding " << name << " which should be included in EDIT section\n\n";
     tran_file << name << std::endl;
 
-    for (size_t n=0; n < trans.size() ; n++) {
-        tran_file << " " << std::fixed << trans[n];
+    int nCells = egrid.totalNumberOfCells();
+    auto dims = egrid.dimension();
 
-        if (((n+1) % ncol) == 0)
-            tran_file << std::endl;
+    int n=0;
+
+    for (size_t k = 0; k < dims[2]; k++){
+        for (size_t j = 0; j < dims[1]; j++){
+            for (size_t i = 0; i < dims[0]; i++){
+
+                int actInd = egrid.active_index(i,j,k);
+
+                if (actInd > -1)
+                    tran_file << " " << std::fixed << trans[actInd];
+                else
+                    tran_file << " " << std::fixed << 0.0;
+
+                //std::cout << " " << actInd;
+                n++;
+
+                if (((n+1) % ncol) == 0)
+                    tran_file << std::endl;
+
+            }
+        }
     }
-
-    if ((trans.size() % ncol) != 0)
-        tran_file << std::endl;
 
     tran_file << "/ \n";
 
     tran_file.close();
+
 }
 
 
@@ -236,9 +255,6 @@ int main(int argc, char **argv) {
             remove_nnc_list.push_back(nnc);
 
 
-    //for (auto nnc : remove_nnc_list)
-    //    std::cout << "remove: " << nnc << "  remove with editnnc ( * 0.0) in EDIT section " << std::endl;
-
     // start writing output files
 
     {
@@ -248,7 +264,7 @@ int main(int argc, char **argv) {
         grid_nnc_file << "-- file holding NNC which should be included in GRID section \n\nNNC" << std::endl;
 
         for (auto nnc : extra_nnc_list)
-            grid_nnc_file << nnc << std::endl;
+            grid_nnc_file << nnc << " / " << std::endl;
 
         grid_nnc_file << "/ \n";
 
@@ -263,7 +279,7 @@ int main(int argc, char **argv) {
         edit_nnc_file << "-- file holding EDITNNCR which should be included in EDIT section \nEDITNNCR" << std::endl;
 
         for (auto nnc : nnc_list_r)
-            edit_nnc_file << nnc << std::endl;
+            edit_nnc_file << nnc << " / " << std::endl;
 
         edit_nnc_file << "/ \n";
 
@@ -280,7 +296,7 @@ int main(int argc, char **argv) {
 
         for (auto nnc : remove_nnc_list){
             nnc.setTrans(0.0);
-            edit_nnc_file << nnc << std::endl;
+            edit_nnc_file << nnc << " / " << std::endl;
         }
 
         edit_nnc_file << "/ \n";
@@ -288,9 +304,9 @@ int main(int argc, char **argv) {
         edit_nnc_file.close();
     }
 
-    write_keyword(output_name + "_tranx.inc", "TRANX", tranx_r);
-    write_keyword(output_name + "_trany.inc", "TRANY", trany_r);
-    write_keyword(output_name + "_tranz.inc", "TRANZ", tranz_r);
+    write_keyword(output_name + "_tranx.inc", "TRANX", tranx_r, egrid_r);
+    write_keyword(output_name + "_trany.inc", "TRANY", trany_r, egrid_r);
+    write_keyword(output_name + "_tranz.inc", "TRANZ", tranz_r, egrid_r);
 
     std::cout << "\nFinished, all good \n\n";
 
