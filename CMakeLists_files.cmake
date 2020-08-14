@@ -483,6 +483,7 @@ if(ENABLE_ECL_INPUT)
     examples/opmhash.cpp
     examples/wellgraph.cpp
     examples/make_lodsmry.cpp
+    examples/make_trans_mod.cpp
   )
 endif()
 
@@ -496,6 +497,7 @@ if(ENABLE_ECL_INPUT)
     examples/opmpack.cpp
     examples/opmhash.cpp
     examples/make_lodsmry.cpp
+    examples/make_trans_mod.cpp
   )
 endif()
 
