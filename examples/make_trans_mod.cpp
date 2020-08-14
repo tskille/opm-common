@@ -119,6 +119,25 @@ void write_keyword(const std::string fileName, const std::string name, const std
 }
 
 
+bool verify_same_grid(const Opm::EclIO::EGrid& grid1, const Opm::EclIO::EGrid grid2)
+{
+    bool sameSize = true;
+
+    auto dims1 = grid1.dimension();
+    auto dims2 = grid2.dimension();
+
+    if (dims1[0] != dims2[0] || dims1[1] != dims2[1] || dims1[2] != dims2[2])
+        return false;
+
+    int nact1 = grid1.activeCells();
+    int nact2 = grid2.activeCells();
+
+    if (nact1 != nact2)
+        std::cout << "\n!Warning, not same number of active cells \n" << std::endl;
+
+    return true;
+}
+
 int main(int argc, char **argv) {
 
     int c                            = 0;
@@ -151,6 +170,11 @@ int main(int argc, char **argv) {
 
     Opm::EclIO::EGrid egrid_r = Opm::EclIO::EGrid(ref_rootn + ".EGRID");
     Opm::EclIO::EGrid egrid = Opm::EclIO::EGrid(case_rootn + ".EGRID");
+
+    if (not verify_same_grid(egrid_r, egrid)){
+        std::cout << "\n!Error, grid dimensions are not same \n\n";
+        exit(1);
+    }
 
     Opm::EclIO::EclFile init_r = Opm::EclIO::EclFile(ref_rootn + ".INIT");
     Opm::EclIO::EclFile init = Opm::EclIO::EclFile(case_rootn + ".INIT");
@@ -212,8 +236,8 @@ int main(int argc, char **argv) {
             remove_nnc_list.push_back(nnc);
 
 
-    for (auto nnc : remove_nnc_list)
-        std::cout << "remove: " << nnc << "  remove with editnnc ( * 0.0) in EDIT section " << std::endl;
+    //for (auto nnc : remove_nnc_list)
+    //    std::cout << "remove: " << nnc << "  remove with editnnc ( * 0.0) in EDIT section " << std::endl;
 
     // start writing output files
 
@@ -267,6 +291,8 @@ int main(int argc, char **argv) {
     write_keyword(output_name + "_tranx.inc", "TRANX", tranx_r);
     write_keyword(output_name + "_trany.inc", "TRANY", trany_r);
     write_keyword(output_name + "_tranz.inc", "TRANZ", tranz_r);
+
+    std::cout << "\nFinished, all good \n\n";
 
     return 0;
 }
