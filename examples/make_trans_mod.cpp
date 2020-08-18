@@ -24,7 +24,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iomanip>
-
+#include <cmath>
 
 #include <opm/io/eclipse/EGrid.hpp>
 #include <opm/io/eclipse/EclFile.hpp>
@@ -154,21 +154,100 @@ bool verify_same_grid(const Opm::EclIO::EGrid& grid1, const Opm::EclIO::EGrid gr
     if (nact1 != nact2)
         std::cout << "\n!Warning, not same number of active cells \n" << std::endl;
 
+
+
     return true;
 }
+
+void calcDiff(const std::vector<float>& ref, const std::vector<float>& test, const std::string name){
+
+    //auto porv = init.get<float>("PORV");
+    //auto porv_r = init_r.get<float>("PORV");
+
+    if (ref.size() != test.size())
+        throw std::invalid_argument("number of cells differ");
+
+    float max_abs_diff = 0.0;
+    float max_rel_diff = 0.0;
+
+    for (size_t n=0; n < ref.size();n++){
+        float abs_diff = abs(test[n] - ref[n]);
+        float rel_diff = 0.0;
+
+        if (abs_diff > 0.0)
+            rel_diff = abs_diff / ref[n];
+
+        if (abs_diff > max_abs_diff)
+            max_abs_diff = abs_diff;
+
+        if (rel_diff > max_rel_diff)
+            max_rel_diff = rel_diff;
+
+
+    }
+
+
+    std::cout << name << ": max diff absolute value: " << std::fixed << std::setprecision(8) << max_abs_diff << "  -  ";
+    std::cout << " max diff relative value: " << std::fixed << std::setprecision(8) << max_rel_diff << std::endl;
+}
+
+bool compare(const std::string& ref_rootn, const std::string& case_rootn)
+{
+
+    Opm::EclIO::EGrid egrid_r = Opm::EclIO::EGrid(ref_rootn + ".EGRID");
+    Opm::EclIO::EGrid egrid = Opm::EclIO::EGrid(case_rootn + ".EGRID");
+
+
+    Opm::EclIO::EclFile init_r = Opm::EclIO::EclFile(ref_rootn + ".INIT");
+    Opm::EclIO::EclFile init = Opm::EclIO::EclFile(case_rootn + ".INIT");
+
+    auto tranx_r = init_r.get<float>("TRANX");
+    auto trany_r = init_r.get<float>("TRANY");
+
+    auto tranz_r = init_r.get<float>("TRANZ");
+    auto tranz = init.get<float>("TRANZ");
+
+    auto porv = init.get<float>("PORV");
+    auto porv_r = init_r.get<float>("PORV");
+
+
+    calcDiff(porv_r, porv, "PORV");
+    calcDiff(tranz_r, tranz, "TRANZ");
+
+    std::vector<float> diff_tz;
+    diff_tz.reserve(tranz.size());
+
+    for (size_t n=0; n < tranz.size();n++)
+        diff_tz.push_back(abs(tranz[n] - tranz_r[n]));
+
+    write_keyword("diff_tranz.grdecl", "DIFF_TZ", diff_tz, egrid);
+
+
+
+    std::cout << "good so far " << std::endl;
+    exit(0);
+
+    return true;
+}
+
 
 int main(int argc, char **argv) {
 
     int c                            = 0;
     std::string output_name          = "modified_trans";
+    bool analyse                     = false;
 
-    while ((c = getopt(argc, argv, "o:h")) != -1) {
+    while ((c = getopt(argc, argv, "o:ah")) != -1) {
         switch (c) {
         case 'h':
             printHelp();
             return 0;
         case 'o':
             output_name = optarg;
+            break;
+
+        case 'a':
+            analyse = true;
             break;
 
         default:
@@ -186,10 +265,17 @@ int main(int argc, char **argv) {
     std::string ref_rootn(argv[argOffset]);
     std::string case_rootn(argv[argOffset+1]);
 
+    if (analyse){
+        std::cout << "call new function, and exit" << std::endl;
+        compare(ref_rootn, case_rootn);
+
+        exit(1);
+    }
 
     Opm::EclIO::EGrid egrid_r = Opm::EclIO::EGrid(ref_rootn + ".EGRID");
     Opm::EclIO::EGrid egrid = Opm::EclIO::EGrid(case_rootn + ".EGRID");
 
+    std::cout << "ref grid: " << ref_rootn << "  and case: " << case_rootn << std::endl;
     if (not verify_same_grid(egrid_r, egrid)){
         std::cout << "\n!Error, grid dimensions are not same \n\n";
         exit(1);
