@@ -488,6 +488,9 @@ if(ENABLE_ECL_INPUT)
     examples/opmhash.cpp
     examples/wellgraph.cpp
     examples/make_lodsmry.cpp
+    examples/get_sector.cpp
+    examples/cell_coords.cpp
+    examples/get_props_from_grdecl.cpp
   )
 endif()
 
