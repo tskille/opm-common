@@ -254,6 +254,7 @@ if(ENABLE_ECL_OUTPUT)
           src/opm/io/eclipse/EclOutput.cpp
           src/opm/io/eclipse/EclUtil.cpp
           src/opm/io/eclipse/EGrid.cpp
+          src/opm/io/eclipse/EInit.cpp
           src/opm/io/eclipse/ERft.cpp
           src/opm/io/eclipse/ERst.cpp
           src/opm/io/eclipse/ERsm.cpp
@@ -477,9 +478,14 @@ if(ENABLE_ECL_INPUT)
     tests/ECLFILE.INIT
     tests/ECLFILE.FINIT
     tests/ECLFILE.FINIT
+    tests/LGR_TESTMOD.EGRID
+    tests/LGR_TESTMOD.INIT
+    tests/LGR_TESTMOD.UNRST
+    tests/LGR_TESTMOD.X0002
     tests/MODEL1_IX.INIT
     tests/MODEL1_IX.SMSPEC
     tests/MODEL1_IX.UNSMRY
+    tests/MODEL2_RESTART.DATA
     tests/SPE1CASE1.EGRID
     tests/SPE1CASE1.RFT
     tests/SPE1_TESTCASE.UNRST
@@ -490,7 +496,6 @@ if(ENABLE_ECL_INPUT)
     tests/SPE1CASE1A.UNSMRY
     tests/SPE1CASE1_RST60.SMSPEC
     tests/SPE1CASE1_RST60.UNSMRY
-    tests/MODEL2_RESTART.DATA
     tests/restart/MODEL2.UNRST
   )
   list (APPEND EXAMPLE_SOURCE_FILES
@@ -499,6 +504,7 @@ if(ENABLE_ECL_INPUT)
     examples/opmhash.cpp
     examples/wellgraph.cpp
     examples/make_lodsmry.cpp
+    examples/test_lgr.cpp
   )
 endif()
 
@@ -791,6 +797,7 @@ if(ENABLE_ECL_OUTPUT)
         opm/io/eclipse/EclOutput.hpp
         opm/io/eclipse/EclUtil.hpp
         opm/io/eclipse/EGrid.hpp
+        opm/io/eclipse/EInit.hpp
         opm/io/eclipse/ERft.hpp
         opm/io/eclipse/ERst.hpp
         opm/io/eclipse/ERsm.hpp

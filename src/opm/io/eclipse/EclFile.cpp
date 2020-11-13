@@ -106,7 +106,7 @@ EclFile::EclFile(const std::string& filename, bool preload) : inputFilename(file
 }
 
 
-void EclFile::loadBinaryArray(std::fstream& fileH, std::size_t arrIndex)
+void EclFile::loadBinaryArray(std::fstream& fileH, std::size_t arrIndex) const
 {
     fileH.seekg (ifStreamPos[arrIndex], fileH.beg);
 
@@ -139,7 +139,7 @@ void EclFile::loadBinaryArray(std::fstream& fileH, std::size_t arrIndex)
     arrayLoaded[arrIndex] = true;
 }
 
-void EclFile::loadFormattedArray(const std::string& fileStr, std::size_t arrIndex, int64_t fromPos)
+void EclFile::loadFormattedArray(const std::string& fileStr, std::size_t arrIndex, int64_t fromPos) const
 {
 
     switch (array_type[arrIndex]) {
@@ -172,7 +172,7 @@ void EclFile::loadFormattedArray(const std::string& fileStr, std::size_t arrInde
 }
 
 
-void EclFile::loadData()
+void EclFile::loadData() const
 {
 
     if (formatted) {
@@ -201,7 +201,7 @@ void EclFile::loadData()
 }
 
 
-void EclFile::loadData(const std::string& name)
+void EclFile::loadData(const std::string& name) const
 {
 
     if (formatted) {
@@ -248,7 +248,7 @@ void EclFile::loadData(const std::string& name)
 }
 
 
-void EclFile::loadData(const std::vector<int>& arrIndex)
+void EclFile::loadData(const std::vector<int>& arrIndex) const
 {
 
     if (formatted) {
@@ -289,7 +289,7 @@ void EclFile::loadData(const std::vector<int>& arrIndex)
 }
 
 
-void EclFile::loadData(int arrIndex)
+void EclFile::loadData(int arrIndex) const
 {
     if (formatted) {
 
@@ -441,35 +441,35 @@ std::vector<EclFile::EclEntry> EclFile::getList() const
 
 
 template<>
-const std::vector<int>& EclFile::get<int>(int arrIndex)
+const std::vector<int>& EclFile::get<int>(int arrIndex) const
 {
     return getImpl(arrIndex, INTE, inte_array, "integer");
 }
 
 template<>
 const std::vector<float>&
-EclFile::get<float>(int arrIndex)
+EclFile::get<float>(int arrIndex) const
 {
     return getImpl(arrIndex, REAL, real_array, "float");
 }
 
 
 template<>
-const std::vector<double> &EclFile::get<double>(int arrIndex)
+const std::vector<double> &EclFile::get<double>(int arrIndex) const
 {
     return getImpl(arrIndex, DOUB, doub_array, "double");
 }
 
 
 template<>
-const std::vector<bool>& EclFile::get<bool>(int arrIndex)
+const std::vector<bool>& EclFile::get<bool>(int arrIndex) const
 {
     return getImpl(arrIndex, LOGI, logi_array, "bool");
 }
 
 
 template<>
-const std::vector<std::string>& EclFile::get<std::string>(int arrIndex)
+const std::vector<std::string>& EclFile::get<std::string>(int arrIndex) const
 {
     if ((array_type[arrIndex] != Opm::EclIO::C0NN) && (array_type[arrIndex] != Opm::EclIO::CHAR)){
         std::string message = "Array with index " + std::to_string(arrIndex) + " is not of type " + "std::string";
@@ -548,7 +548,7 @@ EclFile::seekPosition(const std::vector<std::string>::size_type arrIndex) const
 }
 
 template<>
-const std::vector<int>& EclFile::get<int>(const std::string& name)
+const std::vector<int>& EclFile::get<int>(const std::string& name) const
 {
     auto search = array_index.find(name);
 
@@ -561,7 +561,7 @@ const std::vector<int>& EclFile::get<int>(const std::string& name)
 }
 
 template<>
-const std::vector<float>& EclFile::get<float>(const std::string& name)
+const std::vector<float>& EclFile::get<float>(const std::string& name) const
 {
     auto search = array_index.find(name);
 
@@ -575,7 +575,7 @@ const std::vector<float>& EclFile::get<float>(const std::string& name)
 
 
 template<>
-const std::vector<double>& EclFile::get<double>(const std::string &name)
+const std::vector<double>& EclFile::get<double>(const std::string &name) const
 {
     auto search = array_index.find(name);
 
@@ -589,7 +589,7 @@ const std::vector<double>& EclFile::get<double>(const std::string &name)
 
 
 template<>
-const std::vector<bool>& EclFile::get<bool>(const std::string &name)
+const std::vector<bool>& EclFile::get<bool>(const std::string &name) const
 {
     auto search = array_index.find(name);
 
@@ -603,7 +603,7 @@ const std::vector<bool>& EclFile::get<bool>(const std::string &name)
 
 
 template<>
-const std::vector<std::string>& EclFile::get<std::string>(const std::string &name)
+const std::vector<std::string>& EclFile::get<std::string>(const std::string &name) const
 {
     auto search = array_index.find(name);
 
