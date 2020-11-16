@@ -38,10 +38,10 @@ public:
     explicit EclFile(const std::string& filename, bool preload = false);
     bool formattedInput() const { return formatted; }
 
-    void loadData();                            // load all data
-    void loadData(const std::string& arrName);         // load all arrays with array name equal to arrName
-    void loadData(int arrIndex);                // load data based on array indices in vector arrIndex
-    void loadData(const std::vector<int>& arrIndex);   // load data based on array indices in vector arrIndex
+    void loadData() const;                            // load all data
+    void loadData(const std::string& arrName) const;         // load all arrays with array name equal to arrName
+    void loadData(int arrIndex) const;                // load data based on array indices in vector arrIndex
+    void loadData(const std::vector<int>& arrIndex) const;   // load data based on array indices in vector arrIndex
 
     void clearData()
     {
@@ -58,10 +58,10 @@ public:
     const std::vector<int>& getElementSizeList() const { return array_element_size; }
 
     template <typename T>
-    const std::vector<T>& get(int arrIndex);
+    const std::vector<T>& get(int arrIndex) const;
 
     template <typename T>
-    const std::vector<T>& get(const std::string& name);
+    const std::vector<T>& get(const std::string& name) const;
 
     bool hasKey(const std::string &name) const;
     std::size_t count(const std::string& name) const;
@@ -74,11 +74,11 @@ protected:
     bool formatted;
     std::string inputFilename;
 
-    std::unordered_map<int, std::vector<int>> inte_array;
-    std::unordered_map<int, std::vector<bool>> logi_array;
-    std::unordered_map<int, std::vector<double>> doub_array;
-    std::unordered_map<int, std::vector<float>> real_array;
-    std::unordered_map<int, std::vector<std::string>> char_array;
+    mutable std::unordered_map<int, std::vector<int>> inte_array;
+    mutable std::unordered_map<int, std::vector<bool>> logi_array;
+    mutable std::unordered_map<int, std::vector<double>> doub_array;
+    mutable std::unordered_map<int, std::vector<float>> real_array;
+    mutable std::unordered_map<int, std::vector<std::string>> char_array;
 
     std::vector<std::string> array_name;
     std::vector<eclArrType> array_type;
@@ -92,7 +92,7 @@ protected:
     template<class T>
     const std::vector<T>& getImpl(int arrIndex, eclArrType type,
                                   const std::unordered_map<int, std::vector<T>>& array,
-                                  const std::string& typeStr)
+                                  const std::string& typeStr) const
     {
         if (array_type[arrIndex] != type) {
             std::string message = "Array with index " + std::to_string(arrIndex) + " is not of type " + typeStr;
@@ -110,10 +110,10 @@ protected:
     seekPosition(const std::vector<std::string>::size_type arrIndex) const;
 
 private:
-    std::vector<bool> arrayLoaded;
+    mutable std::vector<bool> arrayLoaded;
 
-    void loadBinaryArray(std::fstream& fileH, std::size_t arrIndex);
-    void loadFormattedArray(const std::string& fileStr, std::size_t arrIndex, int64_t fromPos);
+    void loadBinaryArray(std::fstream& fileH, std::size_t arrIndex) const;
+    void loadFormattedArray(const std::string& fileStr, std::size_t arrIndex, int64_t fromPos) const;
 
     std::vector<unsigned int> get_bin_logi_raw_values(int arrIndex) const;
     std::vector<std::string> get_fmt_real_raw_str_values(int arrIndex) const;
