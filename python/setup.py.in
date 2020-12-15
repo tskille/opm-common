@@ -60,6 +60,7 @@ ext_modules = [
                 'cxx/summary_state.cpp',
                 'cxx/table_manager.cpp',
                 'cxx/well.cpp',
+                'cxx/emodel_util.cpp',
                 'cxx/export.cpp'
         ],
         libraries=libs,
@@ -91,7 +92,8 @@ setup(
                 'opm.io.parser',
                 'opm.io.schedule',
                 'opm.io.ecl',
-                'opm.tools'
+                'opm.tools',
+                'opm.util'
             ],
     ext_modules=ext_modules,
     include_package_data=True,

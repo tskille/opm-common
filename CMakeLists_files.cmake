@@ -307,6 +307,7 @@ if(ENABLE_ECL_OUTPUT)
           src/opm/output/eclipse/WriteRPT.cpp
           src/opm/output/eclipse/report/WELSPECS.cpp
           src/opm/output/data/Solution.cpp
+          src/opm/utility/EModel.cpp
       )
 endif()
 
@@ -871,6 +872,7 @@ if(ENABLE_ECL_OUTPUT)
         opm/output/eclipse/WriteRPT.hpp
         opm/output/eclipse/WriteRestartHelpers.hpp
         opm/output/OutputWriter.hpp
+        opm/utility/EModel.hpp
         )
 endif()
 

@@ -155,12 +155,13 @@ npArray get_erst_by_index(Opm::EclIO::ERst * file_ptr, size_t index, size_t rste
 
 npArray get_erst_vector(Opm::EclIO::ERst * file_ptr, const std::string& key, size_t rstep, size_t occurrence)
 {
+
     if (occurrence >= static_cast<size_t>(file_ptr->occurrence_count(key, rstep)))
         throw std::out_of_range("file have less than " + std::to_string(occurrence + 1) + " arrays in selected report step");
 
     auto array_list = file_ptr->listOfRstArrays(rstep);
 
-    size_t array_index = get_array_index(array_list, key, 0);
+    size_t array_index = get_array_index(array_list, key, occurrence);
 
     return get_erst_by_index(file_ptr, array_index, rstep);
 }
