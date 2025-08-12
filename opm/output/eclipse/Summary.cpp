@@ -92,6 +92,9 @@
 
 #include <fmt/format.h>
 
+#include <iostream>
+#include <iomanip>
+
 template <>
 struct fmt::formatter<Opm::EclIO::SummaryNode::Category> : fmt::formatter<string_view>
 {
@@ -4851,6 +4854,7 @@ private:
 
     int prevCreate_{-1};
     int prevReportStepID_{-1};
+    float prevTimeStep_{0.0};
     std::vector<MiniStep>::size_type numUnwritten_{0};
 
     SummaryOutputParameters                  outputParameters_{};
@@ -5057,8 +5061,15 @@ void Opm::out::Summary::SummaryImplementation::write(const MiniStep& ms)
         this->prevReportStepID_ = ms.seq;
     }
 
-    this->stream_->write("MINISTEP", std::vector<int>{ ms.id });
-    this->stream_->write("PARAMS"  , ms.params);
+    if (ms.params[0] > this->prevTimeStep_){
+
+        std::cout << " >> " << std::fixed << std::setprecision(10) <<  ms.params[0] << "\n";
+
+        this->stream_->write("MINISTEP", std::vector<int>{ ms.id });
+        this->stream_->write("PARAMS"  , ms.params);
+
+        this->prevTimeStep_ = ms.params[0];
+    }
 }
 
 void
