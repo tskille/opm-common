@@ -60,6 +60,9 @@ namespace Opm {
             void addKeyword( DeckKeyword&& keyword );
             void addKeyword( const DeckKeyword& keyword );
 
+            void insertKeyword( DeckKeyword&& keyword, int pos );
+            void insertKeyword( const DeckKeyword& keyword, int pos );
+
             const UnitSystem& getDefaultUnitSystem() const;
             const UnitSystem& getActiveUnitSystem() const;
             UnitSystem& getActiveUnitSystem();
