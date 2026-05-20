@@ -126,6 +126,25 @@ const DeckView& Deck::global_view() const {
         this->addKeyword( std::move( kw ) );
     }
 
+    void Deck::insertKeyword( DeckKeyword&& keyword, int pos ) {
+        if (keyword.name() == "FIELD")
+            this->selectActiveUnitSystem( UnitSystem::UnitType::UNIT_TYPE_FIELD );
+        else if (keyword.name() == "METRIC")
+            this->selectActiveUnitSystem( UnitSystem::UnitType::UNIT_TYPE_METRIC );
+        else if (keyword.name() == "LAB")
+            this->selectActiveUnitSystem( UnitSystem::UnitType::UNIT_TYPE_LAB );
+        else if (keyword.name() == "PVT-M")
+            this->selectActiveUnitSystem( UnitSystem::UnitType::UNIT_TYPE_PVT_M );
+
+        this->keywordList.insert(this->keywordList.begin() + pos, std::move( keyword ));
+        this->m_global_view = nullptr;
+    }
+
+    void Deck::insertKeyword( const DeckKeyword& keyword, int pos ) {
+        DeckKeyword kw = keyword;
+        this->insertKeyword( std::move( kw ), pos );
+    }
+
     UnitSystem& Deck::getDefaultUnitSystem() {
         return this->defaultUnits;
     }
